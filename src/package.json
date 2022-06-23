@@ -1,0 +1,11 @@
+{
+  "name": "adaptogen",
+  "private": true,
+  "version": "0.0.1",
+  "description": "This project combines a metadata-updateable NFT with a HTML bootstrap process making editable website templates",
+  "scripts": {},
+  "author": "probably emerging point of entry",
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+}
