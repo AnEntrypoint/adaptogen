@@ -7,17 +7,23 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link href="https://cdn.jsdelivr.net/npm/daisyui@2.15.2/dist/full.css" rel="stylesheet" type="text/css" />
 	<script src="https://cdn.tailwindcss.com"></script>
+	<link rel="stylesheet" href="https://unpkg.com/tailwindcss@1.4.6/dist/base.min.css">
+	<link rel="stylesheet" href="https://unpkg.com/tailwindcss@1.4.6/dist/components.min.css">
+	<link rel="stylesheet" href="https://unpkg.com/@tailwindcss/typography@0.1.2/dist/typography.min.css">
+	<link rel="stylesheet" href="https://unpkg.com/tailwindcss@1.4.6/dist/utilities.min.css">
 	<script>
 		tailwind.config = {
 			daisyui: {
 				themes: ["valentine"],
 			},
+			plugins: [require('@tailwindcss/typography')],
 		}
 	</script>
 	<title>A dApp degen</title>
 </head>
 
 <body>
+
 	<div class="hero min-h-screen">
 		<div class="hero-overlay bg-opacity-60"></div>
 		<div class="hero-content text-center text-neutral-content">
@@ -28,66 +34,174 @@
 						<source src="bg-alt2.webm" type="video/webm">
 					</video>
 				</h1>
-				<h2 class="mb-5 text-lg">change NFT <code>meta~data</code> dynamically</h2>
+				<h2 class="mb-5 text-lg">change ERC721 <code>meta~data</code> dynamically</h2>
 				<div class="btn-group">
 					<button class="btn"><a href="https://github.com/AnEntrypoint/adaptogen" target="_blank">Git
 							Repo</a></button>
-					<button class="btn"> <a
-							href="https://polygonscan.com/address/0x676bfe56091bd392eb919cdd3beb2ddb7f89d4f0"
+					<button class="btn"> <a href="https://polygonscan.com/address/0x676bfe56091bd392eb919cdd3beb2ddb7f89d4f0"
 							target="_blank">Solidity Contract</a></button>
-					<button class="btn btn-active"><a href="https://dsc.gg/entrypoint"
-							target="_blank"></a>Community</a></button>
+					<button class="btn btn-active"><a href="https://dsc.gg/entrypoint" target="_blank"></a>Community</a></button>
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<div class="hero min-h-screen bg-base-200">
-		<div class="hero-content flex-col lg:flex-row">
-			<video class="rounded-2xl w-64" playsinline autoplay muted loop>
-				<source src="bg-alt2.webm" type="video/webm">
-			</video>
-			<div>
-				<span class="font-semibold text-3xl text-secondary mb-2 block">
-					our <code>mission</code>
-				</span>
-				<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
-					give people the <code>power</code>.
-				</h2>
-				<p class="text-base text-body-color mb-8">
-					leveraging <a href="https://web3.storage/" target="_blank">web3.storage</a> 
-					adaptogen 
-				</p>
-				<p class="text-base text-body-color mb-8">
-					our products empower anyone that interacts with our smart contact. around the world to share ideas, 
-					offer support and make a difference.
-				</p>
-				<span class="font-semibold text-3xl text-secondary mb-2 block">
-					our <code>culture</code>
-				</span>
-				<p class="text-base text-body-color mb-12">
-					A domain name is one of the first steps to establishing your
-					brand. Secure a consistent brand image with a domain name that
-					matches your business.
-				</p>
+		<div class="flex flex-col justify-center">
+			<div class="hero-content flex-col lg:flex-row">
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg.webm" type="video/webm">
+				</video>
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						our <code>mission</code>
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						give people the <code>power</code>.
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						leveraging <a href="https://web3.storage/" target="_blank">web3.storage</a>
+						adaptogen allows you to truly transend any webpage. <br />
+						empowering anyone that interacts with our smart contact around the world. <br />
+						to share ideas, offer support and make a difference/impact.
+					</p>
+				</div>
+			</div>
+			<div class="hero-content flex-col lg:flex-row">
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						our <code>culture</code>
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						give people a <code>voice</code>.
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						we are constantly iterating, solving problems and working together to connect people all over the world.<br /> different
+						backgrounds and points of view helps us make better decisions,<br /> build better products and create better experiences
+						for everyone.
+					</p>
+				</div>
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg-alt1.webm" type="video/webm">
+				</video>
+			</div>
+		</div>
+	</div>
+
+	<div class="hero min-h-screen">
+		<div class="flex flex-col justify-center">
+			<div class="hero-content flex-col lg:flex-row">
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg.webm" type="video/webm">
+				</video>
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						serve <code>everyone</code>
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						we are here <code>for you</code>
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						we work to make technology accessible to everyone,<br /> and our business model is ads so our services can be free.
+					</p>
+				</div>
+			</div>
+			<div class="hero-content flex-col lg:flex-row">
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						promote economic <code>opportunity</code>
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						this is your <code>shot</code>
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						our tools level the playing field so businesses grow,<br /> create jobs and strengthen the economy.
+					</p>
+				</div>
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg-alt1.webm" type="video/webm">
+				</video>
+			</div>
+			<div class="hero-content flex-col lg:flex-row">
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg-alt2.webm" type="video/webm">
+				</video>
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						<code>build</code> connection and community
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						together <code>we can</code>
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						our tools level the playing field so businesses grow, create jobs and strengthen the economy. <br />
+						our services help people connect, and when they’re at their best, they bring people closer together.
+					</p>
+				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- INSERT DEMO VID -->
 
+	<div class="hero min-h-screen bg-base-200">
+		<div class="flex flex-col justify-center">
+			<div class="hero-content flex-col lg:flex-row">
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg-alt2.webm" type="video/webm">
+				</video>
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						keep people <code>safe and protect</code> privacy
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8">
+						
+					</h2>
+					<p class="text-base text-body-color mb-8">
+						we have a responsibility to promote the best of what people can do together by keeping people safe and preventing
+						harm.
+					</p>
+				</div>
+			</div>
+			<div class="hero-content flex-col lg:flex-row">
+				<div>
+					<span class="font-semibold text-3xl text-secondary mb-2 block">
+						we change the game when we find each other
+					</span>
+					<h2 class="font-bold text-3xl sm:text-4xl text-dark mb-8"></h2>
+						
+					<p class="text-base text-body-color mb-8">
+						from niche sport to global community. learn more about how skateboarding communities are connecting the world.
+					</p>
+				</div>
+				<video class="rounded-2xl w-64" playsinline autoplay muted loop>
+					<source src="bg-alt2.webm" type="video/webm">
+				</video>
+			</div>
+		</div>
+	</div>
+
+	<div class="w-full shadow-xl bg-secondary shadow-indigo-200 py-10 px-20 flex justify-between items-center">
+		<p class=" text-white"> <span class="text-4xl font-medium">Still Confused ?</span> <br> <span class="text-lg">come
+				speak to us <code>realtime</code>! </span></p>
+		<button class="px-5 py-3  font-medium text-slate-700 shadow-xl  hover:bg-white duration-150  bg-accent">JOIN THE
+			TALK</button>
+	</div>
+
+	</div>
+
 	<footer class="footer footer-center p-10 bg-primary text-primary-content">
 		<div>
 			<img src="bg.png" class="w-32" alt="logo duh" />
 			<p class="font-bold">
-				Probably Emerging, point of entry. <br>Providing hyperlight tech since 20XY
+				probably emerging, point of entry. <br>providing hyperlight tech since 20XY
 			</p>
-			<p>Copyright © 20ZZ - All memes reserved</p>
+			<p>copy~right? © 20ZZ - all memes reserved</p>
 		</div>
 		<div>
 			<div class="grid grid-flow-col gap-4">
-				<a href="https://twitter.com/PointOfEntry" target="_blank"><svg xmlns="http://www.w3.org/2000/svg"
-						width="24" height="24" viewBox="0 0 24 24" class="fill-current">
+				<a href="https://twitter.com/PointOfEntry" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+						height="24" viewBox="0 0 24 24" class="fill-current">
 						<path
 							d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z">
 						</path>
