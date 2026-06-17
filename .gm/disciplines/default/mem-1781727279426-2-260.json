@@ -1,0 +1,3 @@
+## Resolved mutable: m-git-remote
+
+exec `git rev-parse --is-inside-work-tree` -> fatal: not a git repository; `git remote -v` empty. No repo, no origin. git-init-commit-push will init+commit locally; push is blockedBy external until the user supplies a remote.

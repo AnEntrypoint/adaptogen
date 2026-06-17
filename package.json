@@ -1,0 +1,36 @@
+{
+  "name": "dstate",
+  "version": "0.1.0",
+  "description": "Agent-owned, self-evolving DAG+FSM state: durable memory, policy and intuition in one event-sourced store, with soft/hard transition enforcement.",
+  "type": "module",
+  "module": "src/index.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "bin": {
+    "dstate": "src/cli.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "bench": "bun run bench/bench.ts",
+    "cli": "bun run src/cli.ts"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  },
+  "keywords": [
+    "agent",
+    "state-machine",
+    "fsm",
+    "dag",
+    "event-sourcing",
+    "memory",
+    "policy",
+    "bandit",
+    "sqlite"
+  ],
+  "license": "MIT"
+}
