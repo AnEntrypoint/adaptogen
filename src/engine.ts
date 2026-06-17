@@ -418,13 +418,38 @@ export class DState {
     if (trace.decision === "warn") {
       drafts.push({ type: "SoftViolation", payload: { edgeId: edge.id, reason: trace.reasons.join("; ") } });
     }
-    drafts.push({ type: "TransitionTaken", payload: { edgeId: edge.id, from, to } });
+    drafts.push({ type: "TransitionTaken", payload: { edgeId: edge.id, from, to, clean: trace.decision === "allow" } });
     this.store.appendMany(drafts);
     if (trace.escalation.promoted) {
       this.store.append({ type: "EnforcementChanged", payload: { scope: "edge", id: edge.id, mode: "hard" } });
+    } else if (trace.decision === "allow" && edge.enforcement === "hard") {
+      // Auto-demotion: a hard edge used cleanly demotionCleanRuns times in a row
+      // relaxes back to soft, so a one-off rough patch does not harden forever.
+      const cfg = this.getTunables();
+      if (cfg.demotionCleanRuns > 0 && this.cleanStreak(edge.id) >= cfg.demotionCleanRuns) {
+        this.store.append({ type: "EnforcementChanged", payload: { scope: "edge", id: edge.id, mode: "soft" } });
+      }
     }
     this.tick();
     return ok({ applied: true, from, to, edgeId: edge.id, trace });
+  }
+
+  /** Consecutive clean transitions on an edge since its last violation. */
+  private cleanStreak(edgeId: EdgeId): number {
+    const evs = this.store.readEvents();
+    let streak = 0;
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const e = evs[i]!;
+      const p = e.payload as Record<string, unknown>;
+      if (p.edgeId !== edgeId) continue;
+      if (e.type === "TransitionTaken") {
+        if (p.clean === true) streak++;
+        else break; // a warned transition ends the clean run
+      } else if (e.type === "BlockedAttempt") {
+        break;
+      }
+    }
+    return streak;
   }
 
   private findEdgeTo(to: NodeId): { edge: DEdge; from: NodeId } | null {

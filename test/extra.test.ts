@@ -63,3 +63,26 @@ test("overlapping zones resolve to the strictest boundary (nesting)", () => {
   expect(r.ok && r.value.applied).toBe(false);
   ds.close();
 });
+
+test("enforcement auto-demotes a hard edge after clean runs", () => {
+  const ds = freshMem();
+  ds.setTunable("escalationThreshold", 2);
+  ds.setTunable("demotionCleanRuns", 2);
+  ds.remember({ id: "a" });
+  ds.remember({ id: "b" });
+  const e = ds.link("a", "b", { guard: "vars.ok == true", enforcement: "soft" });
+  const eid = e.ok ? e.value.id : "";
+  // two failing-guard soft violations promote the edge to hard
+  ds.setCursor(["a"]);
+  ds.transition("b");
+  ds.setCursor(["a"]);
+  ds.transition("b");
+  expect(ds.store.getEdge(eid)?.enforcement).toBe("hard");
+  // two clean (guard-passing) transitions demote it back to soft
+  ds.setCursor(["a"]);
+  ds.transition("b", { ok: true });
+  ds.setCursor(["a"]);
+  ds.transition("b", { ok: true });
+  expect(ds.store.getEdge(eid)?.enforcement).toBe("soft");
+  ds.close();
+});
