@@ -14,6 +14,10 @@ import {
 } from "./hash.js";
 import { IdGen } from "./ids.js";
 
+// The only stat columns bumpCounter may target -- an allow-list so the
+// interpolated identifier can never be attacker- or bug-supplied.
+const STAT_COUNTER_COLS = new Set(["successes", "failures", "blocks", "soft_violations"]);
+
 export class Store {
   constructor(filename, opts = {}) {
     const { db, ftsEnabled } = openDatabase(filename);
@@ -316,6 +320,10 @@ export class Store {
     );
   }
   bumpCounter(kind, id, col, seq) {
+    // `col` is a SQL identifier, not a bindable value, so it is interpolated.
+    // Guard with an allow-list so no caller can ever inject (the column set is
+    // fixed by the schema; an unknown column is an internal bug, so throw).
+    if (!STAT_COUNTER_COLS.has(col)) throw new Error(`invalid stat counter column '${col}'`);
     this.ensureStat(kind, id);
     this.db.run(
       `UPDATE stats SET ${col} = ${col} + 1, last_seq = ? WHERE scope_kind = ? AND scope_id = ?`,

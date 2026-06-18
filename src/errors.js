@@ -6,7 +6,7 @@
 //   NotFound, DuplicateId, InvalidInput, PayloadTooLarge, CycleRejected,
 //   IllegalTransition, HardBlocked, GuardParseError, IntegrityBroken,
 //   LockHeld, Conflict, ZoneNotFound, CheckpointNotFound, MigrationError,
-//   InvalidConfig
+//   InvalidConfig, NoMoves
 
 export const ERROR_CODES = [
   "NotFound",
@@ -24,6 +24,7 @@ export const ERROR_CODES = [
   "CheckpointNotFound",
   "MigrationError",
   "InvalidConfig",
+  "NoMoves",
 ];
 
 export class DStateError extends Error {

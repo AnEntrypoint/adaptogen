@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased (agent fluency)
+
+- feat(agent-loop): `step({to?, vars?, reward?})` -- one call composes
+  `suggest -> transition -> reward` and returns `{to, suggestion, applied,
+  soft_warned, denied, outcome, reward, done}`, so an agent advances its own
+  state without orchestrating three verbs per tick. Exposed on the CLI as `step`.
+- feat(introspection): every dead-end `fail()` now carries an actionable
+  `details.hint`; `transition` outcomes carry a top-level `soft_warned`;
+  `suggest()` results carry a `breakdown` of `{reward, weight, explore}`.
+- feat(describe): MANIFEST gains `patterns` (runnable worked flows), `errorHints`
+  (per-code recovery), tunable/zone/enforcement `meaning`, guard DSL `examples`
+  and missing-key semantics -- a cold agent learns usage from `describe()` alone.
+- feat(cli): new subcommands `step`, `legal-moves`, `archive`/`deprecate`,
+  `zone-define`/`zone-add`/`zone-remove`/`zone-list`,
+  `checkpoint`/`rollback`/`checkpoints`, and `--embedding` on remember/recall.
+- fix: recall by a tag containing quotes/backslashes now matches the exact JSON
+  element (was a broken substring match); decision-trace `escalation` key is
+  camelCase `softViolations`; `bumpCounter` guards its SQL column against an
+  allow-list. Added `ftsEnabled()` so an agent knows if text recall is degraded.
+
 ## Unreleased
 
 - chore!: rename the project from `dstate` to `adaptogen` (npm package, `adaptogen`

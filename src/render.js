@@ -66,6 +66,8 @@ export function metrics(ds) {
     softViolations: soft,
     meanReward,
     estimatedReplayCost: ds.store.lastSeq() - snapSeq,
+    // false means text recall ran on the LIKE fallback, not FTS5.
+    ftsEnabled: ds.store.ftsEnabled,
   };
 }
 

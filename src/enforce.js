@@ -70,7 +70,7 @@ export function decide(input) {
       ...(input.zoneFrom ? { zoneFrom: input.zoneFrom } : {}),
       ...(input.zoneTo ? { zoneTo: input.zoneTo } : {}),
     },
-    escalation: { soft_violations: input.softViolations, promoted },
+    escalation: { softViolations: input.softViolations, promoted },
     reasons,
   };
 }

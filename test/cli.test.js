@@ -63,3 +63,49 @@ test("describe exposes tunables defaults and getStat for introspection", () => {
   expect(r.out).toContain("maxPayloadBytes");
   expect(r.out).toContain("getStat");
 });
+
+test("describe carries worked patterns, error hints, and the step verb", () => {
+  const f = db();
+  const r = cli(f, "describe");
+  expect(r.out).toContain('"patterns"');
+  expect(r.out).toContain("step_loop");
+  expect(r.out).toContain('"errorHints"');
+  expect(r.out).toContain('"NoMoves"');
+});
+
+test("step drives one suggest->transition->reward and reports done", () => {
+  const f = db();
+  cli(f, "remember", "a");
+  cli(f, "remember", "b");
+  cli(f, "link", "a", "b");
+  cli(f, "cursor", "a");
+  const s = cli(f, "step", "--reward", "1");
+  expect(s.code).toBe(0);
+  expect(s.out).toContain('"to": "b"');
+  expect(s.out).toContain('"done": true');
+  // No move left from b -> NoMoves exit 1.
+  expect(cli(f, "step").code).toBe(1);
+});
+
+test("zones: define, list, and a checkpoint round-trips a rollback", () => {
+  const f = db();
+  cli(f, "remember", "a");
+  cli(f, "remember", "b");
+  expect(cli(f, "zone-define", "safe", "a,b", "--intra", "off").code).toBe(0);
+  expect(cli(f, "zone-list").out).toContain('"safe"');
+  expect(cli(f, "checkpoint", "cp").code).toBe(0);
+  cli(f, "remember", "transient");
+  expect(cli(f, "rollback", "cp").code).toBe(0);
+  expect(cli(f, "get", "transient").code).toBe(1); // rolled away
+});
+
+test("legal-moves lists reachable moves and remember accepts an embedding", () => {
+  const f = db();
+  cli(f, "remember", "a");
+  cli(f, "remember", "b");
+  cli(f, "link", "a", "b");
+  cli(f, "cursor", "a");
+  expect(cli(f, "legal-moves").out).toContain('"to": "b"');
+  expect(cli(f, "remember", "e", "--embedding", "[0.1,0.2,0.3]").code).toBe(0);
+  expect(cli(f, "recall", "--embedding", "[0.1,0.2,0.3]").out).toContain('"id": "e"');
+});

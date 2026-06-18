@@ -200,8 +200,12 @@ export class DState {
       params.push(like, like);
     }
     if (query.tag) {
-      clauses.push("tags LIKE ?");
-      params.push(`%${JSON.stringify(query.tag).slice(1, -1)}%`);
+      // tags is a JSON array column; match the fully JSON-encoded element
+      // (quotes included) so a tag containing quotes/backslashes still matches
+      // exactly and "foo" does not match "foobar". Bound, so injection-safe.
+      clauses.push("tags LIKE ? ESCAPE '\\'");
+      const enc = JSON.stringify(query.tag).replace(/[%_\\]/g, "\\$&");
+      params.push(`%${enc}%`);
     }
     const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";
     params.push(limit);
@@ -314,7 +318,10 @@ export class DState {
   /** Dry-run the decision for a transition to `to` without mutating. */
   explainTransition(to, vars = {}) {
     const found = this.findEdgeTo(to);
-    if (!found) return fail("IllegalTransition", `no transition edge from cursor to ${to}`);
+    if (!found)
+      return fail("IllegalTransition", `no transition edge from cursor to ${to}`, {
+        hint: "check legalMoves()/suggest() for reachable targets",
+      });
     return ok(this.decideTransition(found.edge, found.from, to, vars));
   }
 
@@ -323,12 +330,15 @@ export class DState {
     if (dstStatus == null) return fail("NotFound", `target node ${to} not found`);
     if (dstStatus !== "active") return fail("IllegalTransition", `target ${to} is ${dstStatus}`);
     const found = this.findEdgeTo(to);
-    if (!found) return fail("IllegalTransition", `no transition edge from cursor [${this.store.cursor().join(",")}] to ${to}`);
+    if (!found)
+      return fail("IllegalTransition", `no transition edge from cursor [${this.store.cursor().join(",")}] to ${to}`, {
+        hint: "check legalMoves()/suggest() for reachable targets, or link() an edge first",
+      });
     const { edge, from } = found;
     const trace = this.decideTransition(edge, from, to, vars);
     if (trace.decision === "deny") {
       this.store.append({ type: "BlockedAttempt", payload: { edgeId: edge.id, from, to, reason: trace.reasons.join("; ") } });
-      return ok({ applied: false, from, to, edgeId: edge.id, trace });
+      return ok({ applied: false, soft_warned: false, from, to, edgeId: edge.id, trace });
     }
     const drafts = [];
     if (trace.decision === "warn") {
@@ -347,7 +357,7 @@ export class DState {
       }
     }
     this.tick();
-    return ok({ applied: true, from, to, edgeId: edge.id, trace });
+    return ok({ applied: true, soft_warned: trace.decision === "warn", from, to, edgeId: edge.id, trace });
   }
 
   /** Consecutive clean transitions on an edge since its last violation. */
@@ -449,12 +459,14 @@ export class DState {
     const alpha = this.getTunables().rewardAlpha;
     const scopes = [];
     if (opts.edgeId) {
-      if (!this.store.getEdge(opts.edgeId)) return fail("NotFound", `edge ${opts.edgeId} not found`);
+      if (!this.store.getEdge(opts.edgeId))
+        return fail("NotFound", `edge ${opts.edgeId} not found`, { hint: "pass an existing edgeId, or omit it to reward the last transition" });
       scopes.push({ kind: "edge", id: opts.edgeId, weight: 1 });
     } else {
       const depth = opts.trace ? opts.depth ?? 5 : 1;
       const recent = this.recentTransitions(depth);
-      if (recent.length === 0) return fail("NotFound", "no recent transition to reward");
+      if (recent.length === 0)
+        return fail("NotFound", "no recent transition to reward", { hint: "call transition()/step() first, or pass an explicit edgeId" });
       const lambda = opts.lambda ?? 0.6;
       recent.forEach((t, i) => {
         const w = opts.trace ? Math.pow(lambda, i) : 1;
@@ -476,6 +488,53 @@ export class DState {
 
   getStat(kind, id) {
     return this.store.getStat(kind, id);
+  }
+
+  /** Whether text recall uses FTS5 (true) or the LIKE fallback (false). */
+  ftsEnabled() {
+    return this.store.ftsEnabled;
+  }
+
+  /**
+   * One-call agent loop: pick the top-ranked legal move (or `opts.to`), take it,
+   * and -- if it applied and `opts.reward` was given -- reinforce that edge. The
+   * tight suggest -> transition -> reward cycle in a single verb so an agent
+   * advances its own state without hand-orchestrating three calls per tick.
+   *
+   * opts: { to?, vars?, reward? } -- `to` forces a target (else the suggestion
+   * leader); `reward` is the value to apply on a successful move (omit to skip).
+   * Returns Result<{ to, suggestion, applied, denied, soft_warned, outcome,
+   * reward, done }>; `done` is true when no legal move remains afterward.
+   */
+  step(opts = {}) {
+    const vars = opts.vars ?? {};
+    if (this.store.cursor().length === 0)
+      return fail("InvalidInput", "cursor is empty", { hint: "setCursor([...]) before stepping" });
+    const ranked = this.suggest(vars);
+    const suggestion = opts.to ? ranked.find((s) => s.to === opts.to) ?? null : ranked[0] ?? null;
+    const target = opts.to ?? suggestion?.to;
+    if (!target)
+      return fail("NoMoves", "no legal move from the current cursor", {
+        hint: "no enabled transition out of the cursor; link() a move, relax enforcement, or setCursor() elsewhere",
+      });
+    const res = this.transition(target, vars);
+    if (!res.ok) return res;
+    const outcome = res.value;
+    let reward = null;
+    if (outcome.applied && opts.reward != null) {
+      const r = this.reward(opts.reward, { edgeId: outcome.edgeId });
+      reward = r.ok ? r.value : null;
+    }
+    return ok({
+      to: target,
+      suggestion,
+      applied: outcome.applied,
+      denied: !outcome.applied,
+      soft_warned: outcome.soft_warned,
+      outcome,
+      reward,
+      done: this.legalMoves(vars).length === 0,
+    });
   }
 
   // ---- zones -----------------------------------------------------------

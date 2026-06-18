@@ -19,24 +19,37 @@ function usage() {
       "  describe            machine-readable manifest of the full agent surface",
       "  graph               mermaid export of the active graph",
       "  dot                 graphviz dot export",
-      "  suggest             ranked next moves as json",
+      "  suggest             ranked next moves as json (with score breakdown)",
       "  explain <to>        decision trace for transitioning to <to>",
+      "  legal-moves         all non-denied moves from the cursor (--vars json)",
       "  validate            invariant + integrity report (exit 1 if invalid)",
       "  history [n]         last n log entries",
       "  get <id>            node by id as json",
-      "  recall              query nodes (--text --kind --tag --status --limit)",
+      "  recall              query nodes (--text --kind --tag --status --embedding --limit)",
       "",
       "mutate:",
-      "  remember <id>       create/update a node (--kind --label --payload json --tags a,b)",
+      "  remember <id>       create/update a node (--kind --label --payload json --tags a,b --embedding json)",
       "  link <from> <to>    transition/dependency edge (--kind --label --guard --enforcement --weight)",
       "  depend <node> <pre> dependency edge (node depends on pre)",
       "  unlink <edgeId>     remove an edge",
       "  enforce <e> <mode>  set edge enforcement (off|soft|hard)",
+      "  archive <id>        archive a node",
+      "  deprecate <id>      deprecate a node",
       "  cursor [ids...]     print cursor, or set it to ids",
       "  transition <to>     move the cursor (--vars json)",
+      "  step [to]           one-call suggest->transition->reward loop (--reward v --vars json)",
       "  reward <value>      reinforce the last/chosen edge (--edgeId)",
       "",
+      "zones:",
+      "  zone-define <n> <ids>  define a zone over id,id,... (--intra --boundary)",
+      "  zone-add <name> <id>   add a node to a zone",
+      "  zone-remove <name> <id> remove a node from a zone",
+      "  zone-list              all zones as json",
+      "",
       "durability:",
+      "  checkpoint <name>   named checkpoint of the current head",
+      "  rollback <name>     restore to a named checkpoint",
+      "  checkpoints         list checkpoints as json",
       "  compact [retain]    snapshot and prune old events",
       "  export <file>       write a portable json bundle",
       "  import <file>       load a portable json bundle into --db",
@@ -203,8 +216,17 @@ function main() {
         }
         const payload = parseJsonFlag(flags.payload, "--payload");
         if (payload === null) return 2;
+        let embedding;
+        if (flags.embedding !== undefined) {
+          embedding = parseJsonFlag(flags.embedding, "--embedding");
+          if (embedding === null) return 2;
+          if (!Array.isArray(embedding) || !embedding.every((n) => typeof n === "number")) {
+            process.stderr.write("--embedding must be a json array of numbers\n");
+            return 2;
+          }
+        }
         return emitResult(
-          ds.remember({ id, kind: flags.kind, label: flags.label, payload, tags: flags.tags ? flags.tags.split(",") : undefined }),
+          ds.remember({ id, kind: flags.kind, label: flags.label, payload, embedding, tags: flags.tags ? flags.tags.split(",") : undefined }),
         );
       }
       case "get": {
@@ -220,6 +242,11 @@ function main() {
       case "recall": {
         const q = { text: flags.text, kind: flags.kind, tag: flags.tag, status: flags.status };
         if (flags.limit) q.limit = Number(flags.limit);
+        if (flags.embedding !== undefined) {
+          const emb = parseJsonFlag(flags.embedding, "--embedding");
+          if (emb === null) return 2;
+          q.embedding = emb;
+        }
         process.stdout.write(JSON.stringify(ds.recall(q), null, 2) + "\n");
         return 0;
       }
@@ -283,6 +310,76 @@ function main() {
         }
         return emitResult(ds.setEnforcement(edgeId, mode));
       }
+      case "step": {
+        const vars = parseJsonFlag(flags.vars, "--vars");
+        if (vars === null) return 2;
+        const opts = { vars: vars ?? {} };
+        if (rest[0]) opts.to = rest[0];
+        if (flags.reward !== undefined) opts.reward = Number(flags.reward);
+        return emitResult(ds.step(opts));
+      }
+      case "legal-moves": {
+        const vars = parseJsonFlag(flags.vars, "--vars");
+        if (vars === null) return 2;
+        process.stdout.write(JSON.stringify(ds.legalMoves(vars ?? {}), null, 2) + "\n");
+        return 0;
+      }
+      case "archive":
+      case "deprecate": {
+        const id = rest[0];
+        if (!id) {
+          process.stderr.write(`${cmd} needs a node id\n`);
+          return 2;
+        }
+        return emitResult(cmd === "archive" ? ds.archive(id) : ds.deprecate(id));
+      }
+      case "zone-define": {
+        const name = rest[0];
+        const members = rest[1] ? rest[1].split(",") : [];
+        if (!name || members.length === 0) {
+          process.stderr.write("zone-define needs <name> <id,id,...>\n");
+          return 2;
+        }
+        return emitResult(ds.defineZone(name, members, { intra: flags.intra, boundary: flags.boundary }));
+      }
+      case "zone-add": {
+        const [name, node] = rest;
+        if (!name || !node) {
+          process.stderr.write("zone-add needs <name> <id>\n");
+          return 2;
+        }
+        return emitResult(ds.addToZone(name, node));
+      }
+      case "zone-remove": {
+        const [name, node] = rest;
+        if (!name || !node) {
+          process.stderr.write("zone-remove needs <name> <id>\n");
+          return 2;
+        }
+        return emitResult(ds.removeFromZone(name, node));
+      }
+      case "zone-list":
+        process.stdout.write(JSON.stringify(ds.zones(), null, 2) + "\n");
+        return 0;
+      case "checkpoint": {
+        const name = rest[0];
+        if (!name) {
+          process.stderr.write("checkpoint needs a name\n");
+          return 2;
+        }
+        return emitResult(ds.checkpoint(name));
+      }
+      case "rollback": {
+        const name = rest[0];
+        if (!name) {
+          process.stderr.write("rollback needs a name\n");
+          return 2;
+        }
+        return emitResult(ds.rollback(name));
+      }
+      case "checkpoints":
+        process.stdout.write(JSON.stringify(ds.listCheckpoints(), null, 2) + "\n");
+        return 0;
       default:
         usage();
         return 2;

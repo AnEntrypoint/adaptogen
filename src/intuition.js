@@ -21,25 +21,28 @@ export function rank(moves, cfg, currentSeq, rand) {
   const totalVisits = moves.reduce((a, m) => a + (m.stat?.visits ?? 0), 0);
   const scored = moves.map((m) => {
     const visits = m.stat?.visits ?? 0;
-    const exploit = decayedReward(m.stat, currentSeq, cfg.decayHalfLife) + Math.log(Math.max(1e-9, m.weight));
-    let score;
+    const rewardTerm = decayedReward(m.stat, currentSeq, cfg.decayHalfLife);
+    const weightTerm = Math.log(Math.max(1e-9, m.weight));
+    const exploit = rewardTerm + weightTerm;
+    let explore;
     if (cfg.explore === "greedy") {
-      score = exploit;
+      explore = 0;
     } else if (cfg.explore === "epsilon") {
-      score = exploit + (rand() < cfg.epsilon ? rand() : 0);
+      explore = rand() < cfg.epsilon ? rand() : 0;
     } else {
       // UCB1
-      const explore = cfg.ucbC * Math.sqrt(Math.log(totalVisits + 1) / (visits + 1));
-      score = exploit + explore;
+      explore = cfg.ucbC * Math.sqrt(Math.log(totalVisits + 1) / (visits + 1));
     }
     return {
       edgeId: m.edgeId,
       to: m.to,
-      score,
+      score: exploit + explore,
       confidence: confidence(visits),
       enforcement: m.enforcement,
       visits,
       emaReward: m.stat?.emaReward ?? 0,
+      // Why this move ranks where it does: score = reward + weight + explore.
+      breakdown: { reward: rewardTerm, weight: weightTerm, explore },
     };
   });
   // Deterministic: sort by score desc, then edgeId for ties.

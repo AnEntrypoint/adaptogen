@@ -79,17 +79,61 @@ console.log(ds.render());              // ASCII live view of the current state
 ds.close();
 ```
 
+## Driving it as an agent
+
+The tight loop -- rank the legal moves, take the best, learn from the result --
+is one call. `step()` composes `suggest -> transition -> reward` and tells you
+what happened and whether anything is left:
+
+```js
+const ds = Adaptogen.open("./agent.db");
+ds.setCursor(["plan"]);
+
+let s = ds.step({ reward: 1 });          // take the top-ranked move, reward it
+while (s.ok && !s.value.done) {
+  // s.value: { to, suggestion{breakdown}, applied, soft_warned, denied, done }
+  s = ds.step({ reward: 1 });
+}
+```
+
+`step({ to })` forces a target; omit `reward` to move without reinforcing. On a
+dead end it returns a typed `NoMoves` fail whose `error.details.hint` names the
+recovery. Every `Result` failure an agent can hit carries such a `hint`, and
+`describe().errorHints` maps each code to its recovery. `describe().patterns`
+holds runnable snippets for the common flows (step loop, checkpoint/rollback,
+reward decay, zones), so a cold agent learns usage without reading source.
+
+## Guard DSL
+
+A transition edge can carry a guard: a sandboxed boolean expression (never
+`eval`) evaluated against a read-only context. It is loop-free and depth/length
+bounded; an unknown path reads as `undefined` (comparisons against it are
+false), so a guard never throws.
+
+Context: `from`, `to`, `fromTags`, `toTags`, `fromKind`, `toKind`, `edge.label`,
+`edge.weight`, `stat.visits`, `stat.emaReward`, `stat.successes`,
+`stat.failures`, and `vars.*` (passed per `transition(to, vars)`). Operators:
+`&& || ! == != > >= < <=` plus `in` (membership in a literal array) and `has`
+(array/string contains).
+
+```js
+ds.link("review", "ship", { guard: "stat.failures == 0 && vars.approved == true" });
+ds.link("draft", "review", { guard: "toTags has 'ready'" });
+```
+
+Full grammar, operators, and examples are in `describe().guardDSL`.
+
 ## The verb surface
 
 Memory
 
 - `remember({id, kind?, label?, payload?, tags?, status?, expectVersion?})` -- create/update a node; `payload` is the memory. Optimistic concurrency via `expectVersion`.
-- `recall({id?|kind?|tag?|status?|text?, limit?})` -- query nodes (FTS or LIKE).
+- `recall({id?|kind?|tag?|status?|text?|embedding?, limit?})` -- query nodes by id/kind/tag/status, full-text (FTS5, LIKE fallback), or cosine similarity over a supplied `embedding`.
 - `getNode(id)`, `archive(id)`, `deprecate(id)`.
 
 Structure
 
-- `link(from, to, {kind?, label?, guard?, enforcement?, weight?})` -- transition or dependency edge.
+- `link(from, to, {id?, kind?, label?, guard?, enforcement?, weight?})` -- transition or dependency edge. `weight` must be a finite number `>= 0`.
 - `depend(node, prereq)` -- dependency edge; rejected with the cycle path if it would close a loop.
 - `unlink(edgeId)`, `setEnforcement(edgeId, mode)`.
 - `ready(done?)`, `topo()`, `reachable(from, kind?)`, `ancestors(id)`, `descendants(id)`.
@@ -107,9 +151,10 @@ Zones (safe limited transition zones)
 
 Intuition
 
-- `suggest(vars?)` -- ranks legal moves by a learned value (UCB by default; epsilon/greedy configurable), each with a confidence.
-- `reward(value, {edgeId?|trace?, depth?, lambda?})` -- single-step or decayed multi-step credit assignment.
-- `getStat("node"|"edge", id)`.
+- `suggest(vars?)` -- ranks legal moves by a learned value (UCB by default; epsilon/greedy configurable), each with a `confidence` and a `breakdown` of `{reward, weight, explore}` so you can see why a move ranked where it did.
+- `step({to?, vars?, reward?})` -- one-call `suggest -> transition -> reward`; returns `{to, suggestion, applied, soft_warned, denied, done}`.
+- `reward(value, {edgeId?|trace?, depth?, lambda?})` -- single-step, or decayed multi-step credit: `reward(1, {trace: true, depth: 3, lambda: 0.6})` reinforces the last 3 transitions with exponential decay.
+- `getStat("node"|"edge", id)`, `ftsEnabled()`.
 
 Self-evolution
 
@@ -161,6 +206,16 @@ to `off` is the explicit **gate** that lets an otherwise-blocked crossing throug
 
 `selfIterate()` runs exactly one safe pass and reports the deltas, so the agent
 iterates on its own abilities without ever leaving the graph in an invalid state.
+Call `optimize()` to inspect candidate edits (dead nodes, duplicate/low-value
+edges, soft->hard promotions) without applying them, and `selfIterate()` once per
+episode to apply the safe subset under a checkpoint that rolls back on regression.
+
+Zones fence off a region the agent moves within freely while crossing the
+boundary stays governed: `defineZone(name, members, {intra, boundary})` sets the
+in-zone vs boundary enforcement, and `deriveZone(seed, predicate?)` auto-derives
+the members from the reachable subset satisfying a guard predicate, then ratifies
+them. Use a checkpoint around a risky exploration and `rollback(name)` if
+`validate()` does not hold.
 
 ## Durability model
 
@@ -183,30 +238,41 @@ adaptogen status --db ./agent.db     # cursor, ranked moves, ready frontier, vio
 adaptogen status --json              # same, as structured json for an agent to parse
 adaptogen describe                   # machine-readable manifest (verbs, errors, guard DSL, tunables)
 adaptogen graph / dot                # mermaid / graphviz export
-adaptogen suggest                    # ranked next moves (json)
+adaptogen suggest                    # ranked next moves (json, with score breakdown)
 adaptogen explain <to>               # decision trace
+adaptogen legal-moves [--vars '<json>'] # all non-denied moves from the cursor
 adaptogen validate                   # invariants + integrity (exit 1 if invalid)
 adaptogen history [n] [--json]
 adaptogen get <id>                   # node by id
-adaptogen recall --text <q> [--kind --tag --status --limit]
+adaptogen recall --text <q> [--kind --tag --status --embedding '<json>' --limit]
 ```
 
 Mutate:
 
 ```
-adaptogen remember <id> [--kind --label --payload '<json>' --tags a,b]
+adaptogen remember <id> [--kind --label --payload '<json>' --tags a,b --embedding '<json>']
 adaptogen link <from> <to> [--kind --label --guard '<expr>' --enforcement --weight]
 adaptogen depend <node> <prereq>     # node depends on prereq (DAG edge)
 adaptogen unlink <edgeId>
 adaptogen enforce <edgeId> <off|soft|hard>
+adaptogen archive <id> / deprecate <id>
 adaptogen cursor [ids...]            # print cursor, or set it
 adaptogen transition <to> [--vars '<json>']
+adaptogen step [to] [--reward <v>] [--vars '<json>']  # suggest -> transition -> reward
 adaptogen reward <value> [--edgeId <id>]
+```
+
+Zones:
+
+```
+adaptogen zone-define <name> <id,id,...> [--intra off|soft|hard] [--boundary ...]
+adaptogen zone-add <name> <id> / zone-remove <name> <id> / zone-list
 ```
 
 Durability:
 
 ```
+adaptogen checkpoint <name> / rollback <name> / checkpoints
 adaptogen compact [retain]
 adaptogen export <file> / import <file>
 ```
