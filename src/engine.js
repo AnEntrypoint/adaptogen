@@ -172,15 +172,19 @@ export class DState {
       if (ranked.length) return ranked;
     }
     if (query.text && this.store.ftsEnabled) {
-      const safe = query.text.replace(/["']/g, " ").trim();
-      if (safe) {
+      // Treat the whole query as a literal FTS5 phrase: wrap in double quotes and
+      // double any embedded quote. This neutralizes every FTS operator char
+      // (`;:*()-` etc.) so arbitrary agent text is a search, never a syntax error.
+      const trimmed = query.text.trim();
+      if (trimmed) {
+        const phrase = `"${trimmed.replace(/"/g, '""')}"`;
         const rows = db
           .query(
             "SELECT f.id FROM nodes_fts f JOIN nodes n ON n.id = f.id WHERE nodes_fts MATCH ? " +
               (query.status ? "AND n.status = ? " : "") +
               "ORDER BY rank LIMIT ?",
           )
-          .all(...(query.status ? [safe, query.status, limit] : [safe, limit]));
+          .all(...(query.status ? [phrase, query.status, limit] : [phrase, limit]));
         return rows.map((r) => this.store.getNode(r.id)).filter(Boolean);
       }
     }

@@ -481,13 +481,22 @@ export class Store {
     const rows = this.db.query("SELECT * FROM events ORDER BY seq").all();
     let prevHash = GENESIS_HASH;
     let checked = 0;
-    let expectedSeq = 0;
+    // Anchor on the first retained event. An uncompacted log starts at seq 1 and
+    // its prev_hash must be GENESIS; a compacted log legitimately starts mid-chain
+    // (the prefix was pruned under a snapshot), so we trust its stored prev_hash as
+    // the anchor and verify continuity from there -- tampering within the retained
+    // tail is still fully caught.
+    let expectedSeq = null;
     for (const row of rows) {
       checked++;
-      expectedSeq++;
+      if (expectedSeq === null) {
+        expectedSeq = row.seq;
+        if (row.seq !== 1) prevHash = row.prev_hash;
+      }
       if (row.seq !== expectedSeq) {
         return { ok: false, checkedEvents: checked, firstBreakSeq: row.seq, detail: `seq gap: expected ${expectedSeq}, got ${row.seq}` };
       }
+      expectedSeq++;
       const payload = JSON.parse(row.payload);
       const checksum = eventChecksum(row.seq, row.type, row.ts, payload);
       if (checksum !== row.checksum) {

@@ -109,3 +109,29 @@ test("legal-moves lists reachable moves and remember accepts an embedding", () =
   expect(cli(f, "remember", "e", "--embedding", "[0.1,0.2,0.3]").code).toBe(0);
   expect(cli(f, "recall", "--embedding", "[0.1,0.2,0.3]").out).toContain('"id": "e"');
 });
+
+test("cli exit-code contract: unknown command and missing args both exit 2", () => {
+  const f = db();
+  expect(cli(f, "frobnicate").code).toBe(2);
+  expect(cli(f, "remember").code).toBe(2); // missing id
+  expect(cli(f, "link", "a").code).toBe(2); // missing target
+});
+
+test("cli runs against an in-memory db and validate exits 0 on a clean store", () => {
+  const r = spawnSync("bun", ["run", "src/cli.js", "--db", ":memory:", "validate"], { encoding: "utf8" });
+  expect(r.status).toBe(0);
+});
+
+test("cli json output is newline-terminated for piping", () => {
+  const f = db();
+  cli(f, "remember", "a");
+  const r = cli(f, "get", "a");
+  expect(r.out.endsWith("\n")).toBe(true);
+});
+
+test("cli shell-injection-shaped args are treated as literal ids, not executed", () => {
+  const f = db();
+  const r = cli(f, "remember", "a", "--label", "$(touch /tmp/pwned); rm -rf x");
+  expect(r.code).toBe(0); // stored as a literal label, nothing executed
+  expect(cli(f, "get", "a").out).toContain("rm -rf x");
+});
