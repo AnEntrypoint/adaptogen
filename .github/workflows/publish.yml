@@ -6,6 +6,10 @@ name: publish
 on:
   push:
     branches: [main]
+    # Tooling/bookkeeping-only commits should not burn a version + publish.
+    paths-ignore:
+      - '.gm/**'
+      - '**/*.md'
 
 concurrency:
   group: publish-main
