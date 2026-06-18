@@ -147,6 +147,26 @@ ok(iter.ok && iter.value.valid, "selfIterate converges without breaking invarian
 ok(ds.validate().ok, "validate is clean post-iteration");
 ok(ds.repair().fixed.length === 0, "repair finds nothing to fix on a clean store");
 
+// ---- compose: plan() atomic bulk builder + orient() snapshot ---------------
+const pb = DState.open(":memory:", { seed: false });
+ok(pb.plan({}).value.nodes.length === 0, "plan with an empty spec creates nothing");
+const built = pb.plan({
+  nodes: ["a", { id: "b", payload: { k: 1 } }, "c"],
+  transitions: [["a", "b"], ["b", "c", { guard: "vars.go == true" }]],
+  deps: [["b", "a"], ["c", "b"]],
+  cursor: ["a"],
+});
+ok(built.ok && built.value.nodes.length === 3 && built.value.transitions.length === 2, "plan builds nodes+edges atomically");
+ok(JSON.stringify(pb.cursor()) === JSON.stringify(["a"]) && pb.ready([]).join() === "a", "plan sets cursor and the dep frontier is the root");
+const seq0 = pb.store.lastSeq();
+ok(pb.plan({ nodes: ["d"], transitions: [["d", "a", { guard: "vars.x ==" }]] }).error.code === "GuardParseError", "plan rejects a bad guard");
+ok(pb.plan({ deps: [["a", "c"]] }).error.code === "CycleRejected", "plan rejects a batch-closing dependency cycle");
+ok(pb.plan({ nodes: ["e", "e"] }).error.code === "DuplicateId", "plan rejects a duplicate id within the spec");
+ok(pb.store.lastSeq() === seq0 && pb.getNode("d") === null, "a failed plan writes nothing (all-or-nothing atomicity)");
+const o = pb.orient({ go: true });
+ok(o.cursor[0] === "a" && o.suggestions[0].to === "b" && o.integrity_ok && !o.done, "orient returns a coherent situational snapshot");
+pb.close();
+
 // ---- durability: state survives a real close / reopen ----------------------
 const before = ds.cursor().slice().sort();
 ds.close();

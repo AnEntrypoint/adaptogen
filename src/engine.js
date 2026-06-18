@@ -15,7 +15,9 @@ import { compileGuard, evalGuard } from "./guard.js";
 import { crossingInfo, boundaryMode, intraMode } from "./zone.js";
 import { decide } from "./enforce.js";
 import { rank } from "./intuition.js";
-import { dependencyCycle, readyFrontier, topoSort, reachable, ancestors, descendants } from "./graph.js";
+import { dependencyCycle, readyFrontier, topoSort, reachable, ancestors, descendants, depAdjacency, hasPath } from "./graph.js";
+import { validate } from "./validate.js";
+import { history } from "./history.js";
 
 export class DState {
   constructor(filename, opts) {
@@ -539,6 +541,156 @@ export class DState {
       reward,
       done: this.legalMoves(vars).length === 0,
     });
+  }
+
+  // ---- compose ---------------------------------------------------------
+
+  /**
+   * Build a whole workflow in one atomic call from a declarative spec, closing
+   * the gap between an agent's mental plan and the graph. The spec is validated
+   * in full against a dry projection BEFORE anything is written; on the first
+   * problem it returns a single Result fail naming the offending item by index,
+   * and NOT ONE event is appended (all-or-nothing -- there is never a partial
+   * graph). On success every node/edge/dependency/cursor is committed.
+   *
+   * spec: {
+   *   nodes:       [ id | { id, kind?, label?, payload?, tags?, status? } ],
+   *   transitions: [ [from, to, opts?] | { from, to, ...opts } ],   // FSM edges
+   *   deps:        [ [node, prereq] | { node, prereq } ],           // DAG edges
+   *   cursor:      [ id, ... ],                                     // optional
+   * }
+   * An endpoint id is valid if it already exists OR is declared in spec.nodes,
+   * so a plan can wire fresh and pre-existing nodes together in one shot.
+   * Returns Result<{ nodes, transitions, deps, cursor }> of what was created.
+   */
+  plan(spec = {}) {
+    const nodes = spec.nodes ?? [];
+    const transitions = spec.transitions ?? [];
+    const deps = spec.deps ?? [];
+    const cursor = spec.cursor ?? null;
+    if (!Array.isArray(nodes) || !Array.isArray(transitions) || !Array.isArray(deps))
+      return fail("InvalidInput", "plan: nodes, transitions, and deps must be arrays");
+
+    // 1. nodes: id charset, in-spec uniqueness, payload size.
+    const max = this.getTunables().maxPayloadBytes;
+    const planned = new Map();
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const input = typeof n === "string" ? { id: n } : n;
+      const id = input?.id;
+      if (!isValidId(id)) return fail("InvalidInput", `plan.nodes[${i}]: invalid node id '${id}'`);
+      if (planned.has(id)) return fail("DuplicateId", `plan.nodes[${i}]: duplicate id '${id}' within the spec`);
+      const payload = input.payload ?? {};
+      if (JSON.stringify(payload).length > max) return fail("PayloadTooLarge", `plan.nodes[${i}] (${id}): payload exceeds ${max}B`);
+      planned.set(id, input);
+    }
+    const exists = (id) => planned.has(id) || !!this.store.getNode(id);
+
+    // 2. transitions: endpoints resolve, guard compiles, weight + id valid.
+    const normTrans = [];
+    for (let i = 0; i < transitions.length; i++) {
+      const t = transitions[i];
+      const from = Array.isArray(t) ? t[0] : t.from;
+      const to = Array.isArray(t) ? t[1] : t.to;
+      const opts = Array.isArray(t) ? t[2] ?? {} : t;
+      if (!exists(from)) return fail("NotFound", `plan.transitions[${i}]: source '${from}' is neither pre-existing nor declared in spec.nodes`);
+      if (!exists(to)) return fail("NotFound", `plan.transitions[${i}]: target '${to}' is neither pre-existing nor declared in spec.nodes`);
+      if (opts.weight != null && (typeof opts.weight !== "number" || !Number.isFinite(opts.weight) || opts.weight < 0))
+        return fail("InvalidInput", `plan.transitions[${i}]: weight must be a finite number >= 0, got ${opts.weight}`);
+      if (opts.id != null && !isValidId(opts.id)) return fail("InvalidInput", `plan.transitions[${i}]: invalid edge id '${opts.id}'`);
+      if (opts.guard != null) {
+        const c = this.compile(opts.guard);
+        if (!c.ok) return fail("GuardParseError", `plan.transitions[${i}]: ${c.error.message}`);
+      }
+      normTrans.push({ from, to, opts });
+    }
+
+    // 3. deps: endpoints resolve, and the WHOLE batch stays acyclic. Seed the
+    // working adjacency with the committed dependency graph, then add each
+    // proposed prereq->node edge only after checking node cannot already reach
+    // prereq -- so a cycle closed by any edge in the batch is caught here.
+    const depAdj = depAdjacency(this.store);
+    const normDeps = [];
+    for (let i = 0; i < deps.length; i++) {
+      const d = deps[i];
+      const node = Array.isArray(d) ? d[0] : d.node;
+      const prereq = Array.isArray(d) ? d[1] : d.prereq;
+      if (!exists(node)) return fail("NotFound", `plan.deps[${i}]: node '${node}' is neither pre-existing nor declared in spec.nodes`);
+      if (!exists(prereq)) return fail("NotFound", `plan.deps[${i}]: prereq '${prereq}' is neither pre-existing nor declared in spec.nodes`);
+      if (hasPath(depAdj, node, prereq))
+        return fail("CycleRejected", `plan.deps[${i}]: dependency ${prereq}->${node} would create a cycle`, { edge: [prereq, node] });
+      if (!depAdj.has(prereq)) depAdj.set(prereq, []);
+      depAdj.get(prereq).push(node);
+      normDeps.push({ node, prereq });
+    }
+
+    // 4. cursor: every member resolves and will be active after creation.
+    if (cursor != null) {
+      if (!Array.isArray(cursor)) return fail("InvalidInput", "plan.cursor must be an array of node ids");
+      for (const id of cursor) {
+        if (planned.has(id)) {
+          const st = planned.get(id).status ?? "active";
+          if (st !== "active") return fail("IllegalTransition", `plan.cursor: planned node '${id}' is ${st}`);
+        } else {
+          const n = this.store.getNode(id);
+          if (!n) return fail("NotFound", `plan.cursor: node '${id}' not found`);
+          if (n.status !== "active") return fail("IllegalTransition", `plan.cursor: node '${id}' is ${n.status}`);
+        }
+      }
+    }
+
+    // 5. Commit. Every step was validated above, so none of these can fail; a
+    // dependency subset of an acyclic batch is itself acyclic, so each depend()
+    // re-check passes. Nodes first, then edges that may reference them.
+    const created = { nodes: [], transitions: [], deps: [], cursor: null };
+    for (const [id, input] of planned) {
+      this.remember(input);
+      created.nodes.push(id);
+    }
+    for (const t of normTrans) created.transitions.push(this.link(t.from, t.to, t.opts).value.id);
+    for (const d of normDeps) created.deps.push(this.depend(d.node, d.prereq).value.id);
+    if (cursor != null) {
+      this.setCursor(cursor);
+      created.cursor = cursor;
+    }
+    return ok(created);
+  }
+
+  /**
+   * One structured situational snapshot for a cold or returning agent: where the
+   * cursor is, the ranked moves it should consider, which moves are blocked and
+   * why, the dependency-ready frontier, integrity/violation status, the recent
+   * log, and the live config -- everything needed to decide the next action in a
+   * single read, without stitching together suggest/legalMoves/ready/validate/
+   * history by hand. Pure read; mutates nothing.
+   */
+  orient(vars = {}) {
+    const cursor = this.cursor();
+    const blocked = [];
+    for (const from of cursor) {
+      for (const edge of this.store.outEdges(from, "transition")) {
+        if (this.store.nodeStatus(edge.dst) !== "active") continue;
+        const trace = this.decideTransition(edge, from, edge.dst, vars);
+        if (trace.decision === "deny") blocked.push({ edgeId: edge.id, to: edge.dst, from, reasons: trace.reasons });
+      }
+    }
+    const done = new Set(this.store.allNodes().filter((n) => (this.store.getStat("node", n.id)?.visits ?? 0) > 0).map((n) => n.id));
+    const report = validate(this);
+    const legal = this.legalMoves(vars);
+    return {
+      cursor,
+      suggestions: this.suggest(vars),
+      legalMoves: legal,
+      blocked,
+      ready: readyFrontier(this.store, done),
+      violations: report.violations.length,
+      integrity_ok: report.ok,
+      recent: history(this, { limit: 5 }),
+      seq: this.store.lastSeq(),
+      ftsEnabled: this.store.ftsEnabled,
+      tunables: this.getTunables(),
+      done: legal.length === 0,
+    };
   }
 
   // ---- zones -----------------------------------------------------------

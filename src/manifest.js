@@ -60,6 +60,10 @@ export const MANIFEST = {
     ],
   },
   verbs: {
+    compose: [
+      ["plan", "({ nodes:[id|{id,kind?,label?,payload?,tags?,status?}], transitions:[[from,to,opts?]|{from,to,...opts}], deps:[[node,prereq]|{node,prereq}], cursor?:[id] }) -> Result<{nodes,transitions,deps,cursor}> -- atomic, all-or-nothing bulk graph builder; validates the whole spec (ids, endpoints, guards, weights, batch acyclicity, cursor) before writing anything, so a failure leaves zero events. An endpoint resolves if pre-existing OR declared in spec.nodes."],
+      ["orient", "(vars?) -> { cursor, suggestions, legalMoves, blocked[{to,reasons}], ready, violations, integrity_ok, recent, seq, ftsEnabled, tunables, done } -- one situational snapshot a cold/returning agent reads to decide its next move; pure read."],
+    ],
     memory: [
       ["remember", "{ id, kind?, label?, payload?, tags?, status?, embedding?, expectVersion? } -> Result<DNode>"],
       ["getNode", "(id) -> DNode | null"],
@@ -179,6 +183,22 @@ export const MANIFEST = {
   },
   patterns: {
     summary: "worked, runnable agent flows (ASCII only); copy and adapt",
+    build_a_workflow: [
+      "// One atomic call turns a mental plan into a graph; on any error nothing is written.",
+      "const r = ds.plan({",
+      "  nodes: ['research', { id: 'draft', payload: { words: 0 } }, 'review', 'ship'],",
+      "  transitions: [['research', 'draft'], ['draft', 'review'], ['review', 'ship', { guard: \"vars.approved == true\" }]],",
+      "  deps: [['draft', 'research'], ['review', 'draft'], ['ship', 'review']],",
+      "  cursor: ['research'],",
+      "});",
+      "if (!r.ok) console.log(r.error.code, r.error.message); // names the offending item by index",
+    ],
+    orient_then_act: [
+      "// A cold or returning agent reads one snapshot, then steps.",
+      "const o = ds.orient();",
+      "// o: { cursor, suggestions, legalMoves, blocked, ready, violations, integrity_ok, recent, done }",
+      "if (!o.done && o.integrity_ok) ds.step({ reward: 1 });",
+    ],
     minimal_session: [
       "const ds = Adaptogen.open('./agent.db');",
       "ds.remember({ id: 'plan', payload: { goal: 'ship' } });",

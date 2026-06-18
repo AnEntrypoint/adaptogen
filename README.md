@@ -103,6 +103,38 @@ recovery. Every `Result` failure an agent can hit carries such a `hint`, and
 holds runnable snippets for the common flows (step loop, checkpoint/rollback,
 reward decay, zones), so a cold agent learns usage without reading source.
 
+### Build a workflow in one call
+
+Going from a mental plan to the graph used to be many `remember`/`link`/`depend`
+calls. `plan()` does it atomically: validate the whole spec -- ids, endpoints,
+guard compilation, weights, batch dependency-acyclicity, cursor -- and only then
+write. On the first problem it returns one `Result` fail naming the offending
+item by index and writes **nothing** (no partial graph). An endpoint resolves if
+it already exists or is declared in `spec.nodes`, so fresh and existing nodes
+wire together in one shot.
+
+```js
+const r = ds.plan({
+  nodes: ["research", { id: "draft", payload: { words: 0 } }, "review", "ship"],
+  transitions: [["research", "draft"], ["draft", "review"], ["review", "ship", { guard: "vars.approved == true" }]],
+  deps: [["draft", "research"], ["review", "draft"], ["ship", "review"]],
+  cursor: ["research"],
+});
+if (!r.ok) console.log(r.error.code, r.error.message);
+```
+
+### Orient before acting
+
+A cold or returning agent reads one snapshot instead of stitching together
+`suggest`/`legalMoves`/`ready`/`validate`/`history`:
+
+```js
+const o = ds.orient();
+// { cursor, suggestions, legalMoves, blocked:[{to,reasons}], ready,
+//   violations, integrity_ok, recent, seq, ftsEnabled, tunables, done }
+if (!o.done && o.integrity_ok) ds.step({ reward: 1 });
+```
+
 ## Guard DSL
 
 A transition edge can carry a guard: a sandboxed boolean expression (never

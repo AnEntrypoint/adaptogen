@@ -13,6 +13,10 @@ function usage() {
     [
       "adaptogen <command> [--db <file>] [--json] [args]",
       "",
+      "compose:",
+      "  plan --spec <json>  atomic bulk builder ({nodes,transitions,deps,cursor}); all-or-nothing",
+      "  orient              one situational snapshot (cursor,suggestions,blocked,ready,violations,recent)",
+      "",
       "inspect:",
       "  status              cursor, ranked moves, ready frontier, violations",
       "  metrics             counts, hot paths, enforcement + intuition aggregates",
@@ -322,6 +326,21 @@ function main() {
         const vars = parseJsonFlag(flags.vars, "--vars");
         if (vars === null) return 2;
         process.stdout.write(JSON.stringify(ds.legalMoves(vars ?? {}), null, 2) + "\n");
+        return 0;
+      }
+      case "plan": {
+        const spec = parseJsonFlag(flags.spec, "--spec");
+        if (spec === null) return 2;
+        if (spec === undefined) {
+          process.stderr.write("plan needs --spec <json> ({ nodes, transitions, deps, cursor })\n");
+          return 2;
+        }
+        return emitResult(ds.plan(spec));
+      }
+      case "orient": {
+        const vars = parseJsonFlag(flags.vars, "--vars");
+        if (vars === null) return 2;
+        process.stdout.write(JSON.stringify(ds.orient(vars ?? {}), null, 2) + "\n");
         return 0;
       }
       case "archive":
