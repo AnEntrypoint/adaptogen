@@ -1,6 +1,6 @@
 {
   "name": "adaptogen",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agent-owned, self-evolving DAG+FSM state: durable memory, policy and intuition in one event-sourced store, with soft/hard transition enforcement.",
   "type": "module",
   "module": "src/index.js",
