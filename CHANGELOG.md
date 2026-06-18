@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- chore!: rename the project from `dstate` to `adaptogen` (npm package, `adaptogen`
+  CLI bin, manifest identity, default db path `./adaptogen.db`, docs). The JS class
+  is still exported as `DState`, now also aliased as `Adaptogen`. Why: ship under
+  the published package name; no API behavior change.
+- ci: publish to npm on every push to `main` -- `.github/workflows/publish.yml`
+  runs the test + integration witness, bumps the patch version, publishes, and
+  pushes the version commit back with `[skip ci]`. Requires an `NPM_TOKEN` repo
+  secret. Why: releases follow `main` automatically instead of by hand.
+- feat(cli): mutation subcommands (remember/get/recall/link/depend/unlink/enforce/
+  cursor/transition/reward) so an agent drives a full session by shelling out.
+- feat(manifest): `describe()` now reports `getStat` and the tunables defaults/ranges.
+- fix: `link()` rejects a non-finite/negative edge weight; new `DependencyToDeadNode`
+  invariant with repair, and `selfIterate` prunes a gc'd node's edges.
+
 ## 0.2.0
 
 - refactor!: migrate the whole library from TypeScript to buildless JavaScript

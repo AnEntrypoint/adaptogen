@@ -1,4 +1,4 @@
-// Machine-readable self-description so an agent can introspect dstate's full
+// Machine-readable self-description so an agent can introspect adaptogen's full
 // surface without reading source: the verbs it can call, the typed error codes a
 // Result may carry, the guard DSL grammar, and the enforcement levels. Pure data
 // plus describe(); ASCII only.
@@ -7,7 +7,7 @@ import { ERROR_CODES } from "./errors.js";
 import { DEFAULT_TUNABLES } from "./config.js";
 
 export const MANIFEST = {
-  name: "dstate",
+  name: "adaptogen",
   summary:
     "Agent-owned, self-evolving DAG+FSM state store: durable memory, policy, and intuition in one event-sourced graph.",
   enforcement: {

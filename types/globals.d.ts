@@ -1,6 +1,6 @@
 // Minimal ambient declarations so `tsc --noEmit` typechecks offline without
 // pulling `bun-types` over the network. The runtime under `bun` provides the
-// real implementations; these only describe the surface dstate actually uses.
+// real implementations; these only describe the surface adaptogen actually uses.
 
 declare module "bun:sqlite" {
   export interface Statement<R = unknown> {

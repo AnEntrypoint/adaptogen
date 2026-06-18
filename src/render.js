@@ -84,7 +84,7 @@ export function toMermaid(ds) {
 }
 
 export function toDot(ds) {
-  const lines = ["digraph dstate {"];
+  const lines = ["digraph adaptogen {"];
   for (const n of ds.store.allNodes()) {
     if (n.status !== "active") continue;
     lines.push(`  "${safe(n.id)}" [label="${ascii(n.label)}"];`);

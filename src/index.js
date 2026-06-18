@@ -94,6 +94,8 @@ const ext = {
 Object.assign(DState.prototype, ext);
 
 export { DState };
+// Ergonomic alias matching the package name; `import { Adaptogen } from "adaptogen"`.
+export { DState as Adaptogen };
 export { DStateError, ok, err, isOk, isErr, unwrap, ERROR_CODES } from "./errors.js";
 export { DEFAULT_TUNABLES } from "./config.js";
 export { compileGuard, evalGuard } from "./guard.js";

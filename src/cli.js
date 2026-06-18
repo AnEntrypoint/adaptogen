@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 function usage() {
   process.stdout.write(
     [
-      "dstate <command> [--db <file>] [--json] [args]",
+      "adaptogen <command> [--db <file>] [--json] [args]",
       "",
       "inspect:",
       "  status              cursor, ranked moves, ready frontier, violations",
@@ -42,7 +42,7 @@ function usage() {
       "  import <file>       load a portable json bundle into --db",
       "",
       "flags:",
-      "  --db <file>         store path (default ./dstate.db, :memory: for ephemeral)",
+      "  --db <file>         store path (default ./adaptogen.db, :memory: for ephemeral)",
       "  --json              emit structured json for status/history",
     ].join("\n") + "\n",
   );
@@ -96,7 +96,7 @@ function main() {
     usage();
     return 0;
   }
-  const dbFile = flags.db ?? "./dstate.db";
+  const dbFile = flags.db ?? "./adaptogen.db";
   const json = !!flags.json;
   const rest = positionals.slice(1);
 

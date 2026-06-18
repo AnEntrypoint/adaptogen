@@ -1,5 +1,5 @@
 {
-  "name": "dstate",
+  "name": "adaptogen",
   "version": "0.1.0",
   "description": "Agent-owned, self-evolving DAG+FSM state: durable memory, policy and intuition in one event-sourced store, with soft/hard transition enforcement.",
   "type": "module",
@@ -9,7 +9,21 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "dstate": "src/cli.js"
+    "adaptogen": "src/cli.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnEntrypoint/adaptogen.git"
+  },
+  "homepage": "https://github.com/AnEntrypoint/adaptogen#readme",
+  "bugs": {
+    "url": "https://github.com/AnEntrypoint/adaptogen/issues"
   },
   "scripts": {
     "test": "bun test",
@@ -32,6 +46,9 @@
     "sqlite"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "libsql": "^0.5.29"
   }

@@ -1,4 +1,4 @@
-# dstate
+# adaptogen
 
 An agent-owned, self-evolving state system. One LLM agent interacts with it
 directly -- there is no second model in the loop. The agent builds a graph that
@@ -37,7 +37,7 @@ through a synchronous `libsql` client behind a thin db facade. Dependencies were
 surveyed and the FSM/graph libraries rejected in favor of a smaller maintained
 surface:
 
-- **XState** models statically-declared machines with code guards; dstate's
+- **XState** models statically-declared machines with code guards; adaptogen's
   machine is constructed and mutated at runtime, carries intuition + persistence,
   and runs agent-authored guards through a sandboxed DSL (never `eval`). Poor fit.
 - **graphology** is in-memory only; topo sort and cycle detection are ~20 lines
@@ -62,9 +62,9 @@ a LIKE fallback when FTS5 is absent.
 ## Quick start
 
 ```js
-import { DState } from "dstate";
+import { Adaptogen } from "adaptogen"; // `DState` is also exported as an alias
 
-const ds = DState.open("./agent.db"); // recovers, locks, seeds a starter model
+const ds = Adaptogen.open("./agent.db"); // recovers, locks, seeds a starter model
 
 ds.remember({ id: "research", payload: { topic: "caches" } }); // memory
 ds.remember({ id: "draft" });
@@ -179,36 +179,36 @@ The CLI is a thin shell over the JS facade; an agent can drive a full session
 Inspect:
 
 ```
-dstate status --db ./agent.db     # cursor, ranked moves, ready frontier, violations
-dstate status --json              # same, as structured json for an agent to parse
-dstate describe                   # machine-readable manifest (verbs, errors, guard DSL, tunables)
-dstate graph / dot                # mermaid / graphviz export
-dstate suggest                    # ranked next moves (json)
-dstate explain <to>               # decision trace
-dstate validate                   # invariants + integrity (exit 1 if invalid)
-dstate history [n] [--json]
-dstate get <id>                   # node by id
-dstate recall --text <q> [--kind --tag --status --limit]
+adaptogen status --db ./agent.db     # cursor, ranked moves, ready frontier, violations
+adaptogen status --json              # same, as structured json for an agent to parse
+adaptogen describe                   # machine-readable manifest (verbs, errors, guard DSL, tunables)
+adaptogen graph / dot                # mermaid / graphviz export
+adaptogen suggest                    # ranked next moves (json)
+adaptogen explain <to>               # decision trace
+adaptogen validate                   # invariants + integrity (exit 1 if invalid)
+adaptogen history [n] [--json]
+adaptogen get <id>                   # node by id
+adaptogen recall --text <q> [--kind --tag --status --limit]
 ```
 
 Mutate:
 
 ```
-dstate remember <id> [--kind --label --payload '<json>' --tags a,b]
-dstate link <from> <to> [--kind --label --guard '<expr>' --enforcement --weight]
-dstate depend <node> <prereq>     # node depends on prereq (DAG edge)
-dstate unlink <edgeId>
-dstate enforce <edgeId> <off|soft|hard>
-dstate cursor [ids...]            # print cursor, or set it
-dstate transition <to> [--vars '<json>']
-dstate reward <value> [--edgeId <id>]
+adaptogen remember <id> [--kind --label --payload '<json>' --tags a,b]
+adaptogen link <from> <to> [--kind --label --guard '<expr>' --enforcement --weight]
+adaptogen depend <node> <prereq>     # node depends on prereq (DAG edge)
+adaptogen unlink <edgeId>
+adaptogen enforce <edgeId> <off|soft|hard>
+adaptogen cursor [ids...]            # print cursor, or set it
+adaptogen transition <to> [--vars '<json>']
+adaptogen reward <value> [--edgeId <id>]
 ```
 
 Durability:
 
 ```
-dstate compact [retain]
-dstate export <file> / import <file>
+adaptogen compact [retain]
+adaptogen export <file> / import <file>
 ```
 
 License: MIT.

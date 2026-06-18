@@ -1,6 +1,6 @@
-# AGENTS.md -- hard rules for working in dstate
+# AGENTS.md -- hard rules for working in adaptogen
 
-dstate is an agent-owned, self-evolving DAG+FSM state store. These are the
+adaptogen is an agent-owned, self-evolving DAG+FSM state store. These are the
 load-bearing invariants. Any agent (or human) changing this code keeps them.
 
 Runtime: buildless JavaScript (ES modules, no types, no compile step) on Bun.
@@ -27,7 +27,7 @@ driver anywhere else; go through `openDatabase`/the facade.
 ## Agent-facing surface
 
 - Agent input never throws. Public `DState` verbs return `Result<T, DStateError>`
-  with a typed code. Internal invariant breaches (dstate is itself wrong) may
+  with a typed code. Internal invariant breaches (adaptogen is itself wrong) may
   throw; bad agent input may not.
 - Guards are the `guard.js` DSL only. NEVER `eval`/`Function`/dynamic import on
   agent-authored strings. The DSL is loop-free, depth- and length-bounded, and

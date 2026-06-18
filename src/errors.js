@@ -1,6 +1,6 @@
 // Typed error model. Every agent-facing verb returns Result<T, DStateError>
 // rather than throwing on bad input: misuse is data, not a crash. Internal
-// invariant breaches (which mean dstate itself is wrong) still throw.
+// invariant breaches (which mean adaptogen itself is wrong) still throw.
 //
 // Error codes (the typed `code` field on every DStateError):
 //   NotFound, DuplicateId, InvalidInput, PayloadTooLarge, CycleRejected,
