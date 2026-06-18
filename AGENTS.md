@@ -53,8 +53,14 @@ driver anywhere else; go through `openDatabase`/the facade.
 - Data model first: if control flow gets convoluted, fix the shape, not the flow.
 - A change that regresses a green test is reverted first, diagnosed second.
 - The code is plain JavaScript: there is no `tsc`/type gate. Commit only with
-  `bun test` green, the `bun test.js` integration witness passing, and `bun run
-  bench` under budget (per-step transition+suggest stays flat as the graph grows;
-  the bench fails on an O(n) regression). Push only on a clean tree.
+  `bun test.js` (the integration witness) passing and `bun run bench` under budget
+  (per-step transition+suggest stays flat as the graph grows; the bench fails on an
+  O(n) regression). Push only on a clean tree.
+- Tests are ONE file: `test.js` at repo root, 200-line hard ceiling, real services
+  only (real libsql, real on-disk store, real crash recovery -- no mocks, no `test/`
+  directory and no `*.test.js` suite). It is a plain script of `ok(cond, msg)`
+  assertions that `process.exit(1)` on the first failure and exits 0 only when every
+  assertion holds; maximize the API surface it covers within the 200-line budget. A
+  new behavior earns an assertion in `test.js`, not a new file.
 
 @.gm/next-step.md

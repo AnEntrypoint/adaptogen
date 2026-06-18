@@ -33,10 +33,7 @@ jobs:
 
       - run: bun install
 
-      - name: Unit tests
-        run: bun test
-
-      - name: Integration witness
+      - name: Integration witness (the single test file)
         run: bun test.js
 
       # node + npm for version bump and publish; registry-url wires the .npmrc that

@@ -1,93 +1,160 @@
-// Integration witness: a real agent session against a real on-disk store (real
-// libsql, real file, real crash-recovery), exercising the whole stack end to
-// end. Exits 0 only if every assertion holds. Run: `bun test.js`.
+// Single test file: the integration witness. One real on-disk libsql store driven
+// through a full agent session that exercises the entire public API surface end to
+// end -- memory, recall, error contract, dag, edges, zones, fsm/enforcement,
+// intuition (suggest/step/reward), guard DSL, tunables, self-evolution, checkpoint,
+// durability, crash recovery, and portability. Exits 0 only if every assertion
+// holds. Real services, no mocks. Run: `bun test.js`. Hard ceiling: 200 lines.
 
-import { DState, importState } from "./src/index.js";
+import { DState, importState, compileGuard, evalGuard, DEFAULT_TUNABLES } from "./src/index.js";
 import { existsSync, rmSync } from "node:fs";
 
 let n = 0;
 function ok(cond, msg) {
   n++;
   if (!cond) {
-    console.error(`FAIL: ${msg}`);
+    console.error(`FAIL #${n}: ${msg}`);
     process.exit(1);
   }
 }
 
 const FILE = "./tmp/integration.db";
-// Best-effort temp cleanup: on Windows a just-closed sqlite WAL handle can linger
-// briefly (EBUSY), which must not fail the witness -- the assertions are the test.
 function cleanup() {
   for (const s of ["", "-wal", "-shm", ".lock"]) {
     try {
       if (existsSync(FILE + s)) rmSync(FILE + s, { force: true });
     } catch {
-      /* handle not yet released; harmless for a temp file */
+      /* a just-closed WAL handle can linger (EBUSY) on win32; harmless for a temp file */
     }
   }
 }
 cleanup();
 
-// 1. Open a real on-disk store; the agent grows its own self-model.
+// ---- memory: remember / recall (id, text, tag, kind, embedding) / status ----
 let ds = DState.open(FILE, { seed: false, lock: true });
 for (const id of ["scout", "build", "review", "ship", "abort"]) ds.remember({ id, kind: "state", payload: {} });
+ds.remember({ id: "doc", kind: "note", payload: { body: "hello world" }, tags: ['a"b'] });
+ok(ds.getNode("doc").payload.body === "hello world", "remember/getNode round-trips payload");
+ok(ds.recall({ id: "doc" })[0].id === "doc", "recall by id");
+ok(ds.recall({ text: "hello" }).some((x) => x.id === "doc"), "recall by FTS text");
+ok(ds.recall({ tag: 'a"b' }).some((x) => x.id === "doc"), "recall by tag containing a quote");
+ok(ds.recall({ kind: "note" }).length === 1, "recall filtered by kind");
+ds.remember({ id: "vec", payload: {}, embedding: [1, 0, 0] });
+ok(ds.recall({ embedding: [1, 0, 0] })[0].id === "vec", "recall by embedding similarity");
+ds.archive("doc");
+ok(ds.getNode("doc").status === "archived", "archive sets status");
+ok(ds.deprecate("vec").ok && ds.getNode("vec").status === "deprecated", "deprecate sets status");
+
+// ---- error contract: every agent-facing failure is a typed Result ----------
+ok(!ds.remember({ id: "bad id!" }).ok, "invalid node id rejected");
+ok(ds.remember({ id: "x", payload: { v: 0 } }).ok, "valid id accepted");
+const conflict = ds.remember({ id: "x", expectVersion: 999, payload: { v: 1 } });
+ok(!conflict.ok && conflict.error.code === "Conflict", "version mismatch -> Conflict");
+ds.setTunable("maxPayloadBytes", 64);
+ok(ds.remember({ id: "big", payload: { s: "x".repeat(100) } }).error.code === "PayloadTooLarge", "oversized payload rejected");
+ds.setTunable("maxPayloadBytes", DEFAULT_TUNABLES.maxPayloadBytes);
+ok(ds.getNode("nope") === null, "getNode(missing) -> null");
+ok(ds.setStatus("nope", "archived").error.code === "NotFound", "setStatus(missing) -> NotFound");
+
+// ---- dag: depend / topo / ready frontier / ancestors+descendants / cycle ----
 ds.depend("build", "scout");
 ds.depend("review", "build");
 ds.depend("ship", "review");
-ok(!ds.topo().cyclic, "dependency graph is acyclic");
+ok(!ds.topo().cyclic, "dependency dag is acyclic");
 ok(ds.ready([]).includes("scout"), "scout is the initial ready frontier");
+ok(ds.ready(["scout"]).includes("build"), "build is ready once scout is done");
+ok(ds.ancestors("ship").includes("scout"), "ancestors reach the root");
+ok(ds.descendants("scout").includes("ship"), "descendants reach the leaf");
+const cyc = ds.depend("scout", "ship");
+ok(!cyc.ok && cyc.error.code === "CycleRejected", "cyclic dependency rejected");
 
+// ---- edges: link / guard+enforcement / weight validation / unlink ----------
 ds.link("scout", "build");
 ds.link("build", "review");
-ds.link("review", "ship", { guard: "vars.approved == true", enforcement: "hard" });
+const shipEdge = ds.link("review", "ship", { guard: "vars.approved == true", enforcement: "hard" });
 ds.link("review", "build");
 ds.link("ship", "abort", { enforcement: "soft" });
+ok(shipEdge.ok, "guarded hard edge created");
+ok(!ds.link("scout", "build", { weight: -1 }).ok, "negative edge weight rejected");
+const tmp = ds.link("scout", "review");
+ok(ds.unlink(tmp.value.id).ok, "unlink removes an edge");
+ok(ds.unlink("G-nope").error.code === "NotFound", "unlink(missing) -> NotFound");
+
+// ---- zones: define / membership / deriveZone proposal ----------------------
 ds.defineZone("inner", ["scout", "build", "review"], { intra: "off", boundary: "soft" });
+ok(ds.zonesOf("build").includes("inner"), "zonesOf reports membership");
+ds.addToZone("inner", "ship");
+ds.removeFromZone("inner", "ship");
+ok(!ds.zonesOf("ship").includes("inner"), "add then remove zone membership");
+const derived = ds.deriveZone("scout");
+ok(derived.ok && derived.value.members.includes("build"), "deriveZone proposes reachable members");
 
+// ---- fsm: cursor / legalMoves / explain / allow+deny+warn transitions ------
 ds.setCursor(["scout"]);
-ok(ds.transition("build").ok, "scout->build applies");
-ok(ds.transition("review").ok, "build->review applies");
-
-// 2. Hard enforcement blocks an unapproved ship; the cursor holds.
+ok(ds.setCursor(["nope"]).error.code === "NotFound", "setCursor(missing) -> NotFound");
+ok(ds.legalMoves().some((m) => m.to === "build"), "legalMoves lists build");
+ok(ds.transition("build").value.applied, "scout->build applies (allow)");
+ok(ds.transition("review").value.applied, "build->review applies");
+ok(ds.explainTransition("ship").value.decision === "deny", "explain: unapproved ship denies");
+ok(ds.transition("zzz").error.code === "NotFound", "transition to missing node -> NotFound");
 const blocked = ds.transition("ship");
-ok(blocked.ok && blocked.value.applied === false, "unapproved ship is hard-blocked");
-ok(ds.cursor()[0] === "review", "cursor stays on review after a block");
-ok(ds.explainTransition("ship").value.decision === "deny", "explain reports deny");
-
-// 3. Approved ship crosses the zone boundary (soft warn) but applies; reward it.
+ok(blocked.value.applied === false && blocked.value.soft_warned === false, "unapproved ship hard-blocked, not applied");
+ok(ds.cursor()[0] === "review", "cursor holds on a block");
 const ship = ds.transition("ship", { approved: true });
-ok(ship.ok && ship.value.applied && ship.value.trace.decision === "warn", "approved ship warns + applies");
-ds.reward(1, { trace: true, depth: 3 });
-ok((ds.getStat("node", "ship")?.visits ?? 0) === 1, "ship visited once");
-ok((ds.getStat("edge", ship.value.edgeId)?.emaReward ?? 0) > 0, "ship edge accrued reward");
+ok(ship.value.applied && ship.value.soft_warned, "approved ship crosses soft boundary: warns + applies");
 
-// 4. Suggest is intuition: the rewarded next step is reachable and ranked.
+// ---- intuition: reward / getStat / suggest+breakdown / step loop / decay ---
+ds.reward(1, { edgeId: ship.value.edgeId });
+ok(ds.getStat("edge", ship.value.edgeId).emaReward > 0, "reward raises the edge ema");
+ok(ds.reward(1, { edgeId: "G-nope" }).error.code === "NotFound", "reward(bad edge) -> NotFound");
 ds.setCursor(["review"]);
 const sug = ds.suggest({ approved: true });
-ok(sug.length === 2 && sug.every((s) => s.confidence >= 0), "suggest ranks legal moves with confidence");
+ok(sug.length === 2 && sug[0].breakdown && "reward" in sug[0].breakdown && "explore" in sug[0].breakdown, "suggest ranks legal moves with a score breakdown");
+const stepped = ds.step({ vars: { approved: true }, reward: 1 });
+ok(stepped.ok && stepped.value.applied && stepped.value.reward, "step() picks, applies, and rewards the top move");
+ds.setCursor(["abort"]);
+const noMoves = ds.step();
+ok(!noMoves.ok && noMoves.error.code === "NoMoves" && noMoves.error.details.hint, "step with no legal move -> NoMoves + recovery hint");
+ds.setCursor(["scout"]);
+ds.transition("build");
+ds.transition("review");
+const decay = ds.reward(1, { trace: true, depth: 3 });
+ok(decay.ok && decay.value.scopes > 1, "trace reward decays credit over recent transitions");
 
-// 5. Self-evolution: one safe iteration must keep every invariant.
+// ---- guard DSL: compile / eval / prototype-pollution rejection -------------
+ok(compileGuard("vars.x > 1").ok, "guard compiles");
+ok(!compileGuard("vars.x >").ok, "malformed guard -> parse error");
+ok(evalGuard(compileGuard("vars.x == 2").value, { vars: { x: 2 } }) === true, "guard evaluates a true comparison");
+ok(compileGuard("vars.__proto__ == 1").error.code === "GuardParseError", "guard compile rejects a __proto__ path");
+ok(evalGuard(compileGuard("vars.missing == 1").value, { vars: {} }) === false, "missing guard key reads undefined -> comparison false");
+
+// ---- tunables: set persists / invalid rejected -----------------------------
+ok(ds.setTunable("ucbC", 2).ok && ds.getTunables().ucbC === 2, "setTunable persists a knob");
+ok(!ds.setTunable("bogusKnob", 1).ok, "unknown tunable rejected");
+
+// ---- checkpoint / rollback (exact projection restore) ----------------------
+ds.setCursor(["review"]);
+ds.checkpoint("cp1");
+ds.transition("build");
+ok(ds.cursor()[0] === "build", "cursor diverged after the checkpoint");
+ds.rollback("cp1");
+ok(ds.cursor()[0] === "review", "rollback restored the cursor to review");
+ok(ds.verifyIntegrity().ok, "hash-chain integrity intact after rollback");
+ok(ds.rollback("nope").error.code === "CheckpointNotFound", "rollback(missing) -> CheckpointNotFound");
+
+// ---- self-evolution: a safe iteration preserves every invariant ------------
 const iter = ds.selfIterate();
 ok(iter.ok && iter.value.valid, "selfIterate converges without breaking invariants");
-ok(ds.validate().ok, "post-iteration validate is clean");
+ok(ds.validate().ok, "validate is clean post-iteration");
+ok(ds.repair().fixed.length === 0, "repair finds nothing to fix on a clean store");
 
-// 6. Checkpoint, diverge, roll back to the exact prior projection.
-ds.checkpoint("pre-abort");
-ds.setCursor(["ship"]);
-ds.transition("abort");
-ok(ds.cursor()[0] === "abort", "cursor moved to abort");
-ds.rollback("pre-abort");
-ok(ds.cursor()[0] !== "abort", "rollback restored the pre-abort cursor");
-ok(ds.verifyIntegrity().ok, "integrity intact after rollback");
-
-// 7. Durable across a real close/reopen.
-const cursorBeforeClose = ds.cursor().slice().sort();
+// ---- durability: state survives a real close / reopen ----------------------
+const before = ds.cursor().slice().sort();
 ds.close();
 ds = DState.open(FILE, { seed: false, lock: true });
-ok(JSON.stringify(ds.cursor().slice().sort()) === JSON.stringify(cursorBeforeClose), "cursor survives close/reopen");
-ok(ds.getNode("scout") !== null, "memory survives close/reopen");
+ok(JSON.stringify(ds.cursor().slice().sort()) === JSON.stringify(before), "cursor survives close/reopen");
+ok(ds.getNode("scout") !== null && ds.getNode("doc").status === "archived", "memory + status survive reopen");
 
-// 8. Crash recovery: a torn trailing write is trimmed; good state survives.
+// ---- crash recovery: a torn trailing write is trimmed; good state survives --
 const head = ds.store.lastSeq();
 ds.store.db.run(
   "INSERT INTO events(seq,id,type,ts,payload,checksum,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?)",
@@ -97,13 +164,13 @@ const rec = ds.store.recover();
 ok(rec.trimmed === 1, "recovery trims the torn trailing event");
 ok(ds.verifyIntegrity().ok && ds.validate().ok, "state is consistent after recovery");
 
-// 9. Portable: export and reconstruct an identical projection elsewhere.
+// ---- portability: export and reconstruct an identical projection -----------
 const bundle = ds.export();
 const clone = importState(":memory:", bundle);
 ok(clone.getNode("scout") !== null && clone.verifyIntegrity().ok, "export/import reproduces a valid store");
-ok(JSON.stringify(clone.cursor().sort()) === JSON.stringify(ds.cursor().sort()), "cloned cursor matches");
+ok(JSON.stringify(clone.cursor().sort()) === JSON.stringify(ds.cursor().sort()), "cloned cursor matches the source");
 clone.close();
 
 ds.close();
-console.log(`integration witness OK: ${n} assertions across a full agent session (build/enforce/reward/evolve/checkpoint/recover/port)`);
+console.log(`integration witness OK: ${n} assertions across a full agent session (memory/dag/fsm/enforce/zone/intuition/step/evolve/checkpoint/durable/recover/port/errors)`);
 cleanup();

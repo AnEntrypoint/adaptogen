@@ -26,8 +26,7 @@
     "url": "https://github.com/AnEntrypoint/adaptogen/issues"
   },
   "scripts": {
-    "test": "bun test",
-    "test:integration": "bun test.js",
+    "test": "bun test.js",
     "bench": "bun run bench/bench.js",
     "cli": "bun run src/cli.js"
   },

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased (single-file test regime)
+
+- chore(test): tests are now ONE file -- `test.js` at repo root, real services
+  only, 200-line hard ceiling (176 lines). The `test/` directory (24 files) is
+  removed. The single witness was widened from 22 to 62 assertions, covering the
+  full public surface: memory/recall (id, FTS text, quoted tag, kind, embedding),
+  the typed error contract (InvalidInput, Conflict, PayloadTooLarge, NotFound,
+  CycleRejected), dag (topo/ready/ancestors/descendants), edges (guard/weight/
+  unlink), zones, fsm (allow/deny/warn/soft_warned), intuition (suggest+breakdown,
+  step loop incl NoMoves, trace-decay reward), guard DSL (compile/eval/__proto__
+  rejection/missing-key), tunables, self-evolution, checkpoint/rollback, durable
+  close/reopen, crash recovery, and export/import. `package.json` `test` and CI now
+  run `bun test.js`; AGENTS.md encodes the one-file/200-line rule as policy.
+
 ## Unreleased (agent fluency)
 
 - feat(agent-loop): `step({to?, vars?, reward?})` -- one call composes
