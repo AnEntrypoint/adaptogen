@@ -5,6 +5,8 @@ node_modules/
 *.db
 *.db-wal
 *.db-shm
+*.db-journal
+*.db.lock
 *.dstate
 *.dstate-wal
 *.dstate-shm
@@ -31,4 +33,6 @@ node_modules/
 .gm/*.db
 .gm/.turn-browser-edits.json
 .gm/.turn-browser-witnessed
+.gm/disciplines/codeinsight/
+.gm/disciplines/codeinsight-manifest/
 # <<< gm-managed <<<

@@ -28,36 +28,40 @@ zones" it may move within freely while crossing their boundary stays governed.
 ## Why event-sourced over SQLite
 
 The spine is an append-only, hash-chained event log; the queryable graph is a
-projection of it (`bun:sqlite`, WAL). This gets durability, crash recovery,
+projection of it (SQLite via libsql, WAL). This gets durability, crash recovery,
 time-travel, audit, and deterministic replay from one mechanism, which is exactly
 what "construct your own persistence and continuously evolve it reliably" needs.
 
-Dependencies were surveyed and rejected in favor of a smaller maintained surface:
+It is buildless JavaScript (ES modules, no compile step) on Bun, persisting
+through a synchronous `libsql` client behind a thin db facade. Dependencies were
+surveyed and the FSM/graph libraries rejected in favor of a smaller maintained
+surface:
 
-- **XState** models statically-declared machines; dstate's machine is constructed
-  and mutated at runtime and carries intuition + persistence. Poor fit, heavy dep.
+- **XState** models statically-declared machines with code guards; dstate's
+  machine is constructed and mutated at runtime, carries intuition + persistence,
+  and runs agent-authored guards through a sandboxed DSL (never `eval`). Poor fit.
 - **graphology** is in-memory only; topo sort and cycle detection are ~20 lines
   here and must integrate with the persistent projection anyway.
-- **bun:sqlite** is built in -- durable, indexed, zero dependency. Chosen.
+- **libsql** is the one runtime dependency: a synchronous SQLite that runs under
+  Bun and plain Node, keeping the store portable off Bun while staying buildless.
 
-Net: built-in SQLite + hand-rolled small graph algorithms + no FSM library. Zero
-runtime dependencies.
+Net: libsql + hand-rolled small graph algorithms + no FSM library.
 
 ## Install / run
 
 ```
 bun install
-bun test          # 61 tests
-bun run typecheck # tsc --noEmit, clean
+bun test          # 66 unit tests
+bun test.js       # end-to-end integration witness
 bun run bench     # large-graph hot loop + recovery timing
 ```
 
-Requires Bun (uses `bun:sqlite`). SQLite 3.51+ with FTS5 is used for recall, with
+Requires Bun and the `libsql` package. SQLite with FTS5 is used for recall, with
 a LIKE fallback when FTS5 is absent.
 
 ## Quick start
 
-```ts
+```js
 import { DState } from "dstate";
 
 const ds = DState.open("./agent.db"); // recovers, locks, seeds a starter model
@@ -122,6 +126,9 @@ Durability & integrity
 Observe & port
 
 - `render()`, `metrics()`, `toMermaid()`, `toDot()`, `history(filter?)`.
+- `describe()` -- machine-readable manifest of the whole verb surface, error
+  codes, guard DSL grammar, and enforcement levels, so an agent can introspect
+  the API without reading source.
 - `export()` / `importState(file, bundle)`.
 - `setTunable(key, value)` / `getTunables()`.
 
@@ -167,12 +174,14 @@ iterates on its own abilities without ever leaving the graph in an invalid state
 
 ```
 dstate status --db ./agent.db     # cursor, ranked moves, ready frontier, violations
+dstate status --json              # same, as structured json for an agent to parse
+dstate describe                   # machine-readable manifest of the full surface
 dstate graph                      # mermaid export
 dstate suggest                    # ranked next moves (json)
 dstate explain <to>               # decision trace
 dstate validate                   # invariants + integrity (exit 1 if invalid)
 dstate compact [retain]
-dstate history [n]
+dstate history [n] [--json]
 dstate export <file> / import <file>
 ```
 

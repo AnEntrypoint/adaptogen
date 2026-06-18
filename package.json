@@ -32,5 +32,8 @@
     "bandit",
     "sqlite"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "libsql": "^0.5.29"
+  }
 }

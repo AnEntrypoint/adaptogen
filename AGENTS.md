@@ -3,6 +3,13 @@
 dstate is an agent-owned, self-evolving DAG+FSM state store. These are the
 load-bearing invariants. Any agent (or human) changing this code keeps them.
 
+Runtime: buildless JavaScript (ES modules, no types, no compile step) on Bun.
+Persistence is a synchronous libsql client (`libsql` package) reached only
+through the `db.js` facade, which re-exposes the bun:sqlite-shaped
+`db.query(sql).get/all` and `db.run(sql, ...args)` surface, strips libsql's
+injected `_metadata` row key, and normalizes bind values. Do not import a SQLite
+driver anywhere else; go through `openDatabase`/the facade.
+
 ## Architecture (do not route around)
 
 - The event log (`events` table) is the single source of truth. `Store.append`
@@ -14,7 +21,7 @@ load-bearing invariants. Any agent (or human) changing this code keeps them.
 - Never hard-delete history. Nodes are archived/deprecated, edges are removed via
   `EdgeRemoved` events, and the log is only trimmed by recovery (torn tail) or an
   explicit rollback/compaction. Audit survives.
-- Every event is checksummed and hash-chained. Do not weaken `hash.ts`; recovery
+- Every event is checksummed and hash-chained. Do not weaken `hash.js`; recovery
   and integrity depend on a break being localizable to one seq.
 
 ## Agent-facing surface
@@ -22,7 +29,7 @@ load-bearing invariants. Any agent (or human) changing this code keeps them.
 - Agent input never throws. Public `DState` verbs return `Result<T, DStateError>`
   with a typed code. Internal invariant breaches (dstate is itself wrong) may
   throw; bad agent input may not.
-- Guards are the `guard.ts` DSL only. NEVER `eval`/`Function`/dynamic import on
+- Guards are the `guard.js` DSL only. NEVER `eval`/`Function`/dynamic import on
   agent-authored strings. The DSL is loop-free, depth- and length-bounded, and
   reads context via own-property lookups that reject `__proto__`/`constructor`/
   `prototype`. Keep it that way.
@@ -32,7 +39,7 @@ load-bearing invariants. Any agent (or human) changing this code keeps them.
 ## Output
 
 - ASCII only in rendered/exported output. Arrows are `->`, not a glyph. No
-  emojis, bullets, or decorative unicode in `render.ts`/CLI output (`ascii()`
+  emojis, bullets, or decorative unicode in `render.js`/CLI output (`ascii()`
   strips them defensively; do not defeat it).
 
 ## Memory & portability
@@ -45,5 +52,9 @@ load-bearing invariants. Any agent (or human) changing this code keeps them.
 
 - Data model first: if control flow gets convoluted, fix the shape, not the flow.
 - A change that regresses a green test is reverted first, diagnosed second.
-- Commit only with `tsc --noEmit` clean, `bun test` green, and `bun run bench`
-  under budget. Push only on a clean tree.
+- The code is plain JavaScript: there is no `tsc`/type gate. Commit only with
+  `bun test` green, the `bun test.js` integration witness passing, and `bun run
+  bench` under budget (per-step transition+suggest stays flat as the graph grows;
+  the bench fails on an O(n) regression). Push only on a clean tree.
+
+@.gm/next-step.md

@@ -1,8 +1,8 @@
 // Integration witness: a real agent session against a real on-disk store (real
-// bun:sqlite, real file, real crash-recovery), exercising the whole stack end to
+// libsql, real file, real crash-recovery), exercising the whole stack end to
 // end. Exits 0 only if every assertion holds. Run: `bun test.js`.
 
-import { DState, importState } from "./src/index.ts";
+import { DState, importState } from "./src/index.js";
 import { existsSync, rmSync } from "node:fs";
 
 let n = 0;
