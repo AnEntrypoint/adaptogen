@@ -51,7 +51,7 @@ Net: libsql + hand-rolled small graph algorithms + no FSM library.
 
 ```
 bun install
-bun test          # 66 unit tests
+bun test          # unit tests
 bun test.js       # end-to-end integration witness
 bun run bench     # large-graph hot loop + recovery timing
 ```
@@ -172,16 +172,42 @@ iterates on its own abilities without ever leaving the graph in an invalid state
 
 ## CLI
 
+The CLI is a thin shell over the JS facade; an agent can drive a full session
+(inspect and mutate) without writing JS. ASCII output, conventional exit codes,
+`--json` for parseable status/history.
+
+Inspect:
+
 ```
 dstate status --db ./agent.db     # cursor, ranked moves, ready frontier, violations
 dstate status --json              # same, as structured json for an agent to parse
-dstate describe                   # machine-readable manifest of the full surface
-dstate graph                      # mermaid export
+dstate describe                   # machine-readable manifest (verbs, errors, guard DSL, tunables)
+dstate graph / dot                # mermaid / graphviz export
 dstate suggest                    # ranked next moves (json)
 dstate explain <to>               # decision trace
 dstate validate                   # invariants + integrity (exit 1 if invalid)
-dstate compact [retain]
 dstate history [n] [--json]
+dstate get <id>                   # node by id
+dstate recall --text <q> [--kind --tag --status --limit]
+```
+
+Mutate:
+
+```
+dstate remember <id> [--kind --label --payload '<json>' --tags a,b]
+dstate link <from> <to> [--kind --label --guard '<expr>' --enforcement --weight]
+dstate depend <node> <prereq>     # node depends on prereq (DAG edge)
+dstate unlink <edgeId>
+dstate enforce <edgeId> <off|soft|hard>
+dstate cursor [ids...]            # print cursor, or set it
+dstate transition <to> [--vars '<json>']
+dstate reward <value> [--edgeId <id>]
+```
+
+Durability:
+
+```
+dstate compact [retain]
 dstate export <file> / import <file>
 ```
 

@@ -13,7 +13,7 @@ function usage() {
     [
       "dstate <command> [--db <file>] [--json] [args]",
       "",
-      "commands:",
+      "inspect:",
       "  status              cursor, ranked moves, ready frontier, violations",
       "  metrics             counts, hot paths, enforcement + intuition aggregates",
       "  describe            machine-readable manifest of the full agent surface",
@@ -22,8 +22,22 @@ function usage() {
       "  suggest             ranked next moves as json",
       "  explain <to>        decision trace for transitioning to <to>",
       "  validate            invariant + integrity report (exit 1 if invalid)",
-      "  compact [retain]    snapshot and prune old events",
       "  history [n]         last n log entries",
+      "  get <id>            node by id as json",
+      "  recall              query nodes (--text --kind --tag --status --limit)",
+      "",
+      "mutate:",
+      "  remember <id>       create/update a node (--kind --label --payload json --tags a,b)",
+      "  link <from> <to>    transition/dependency edge (--kind --label --guard --enforcement --weight)",
+      "  depend <node> <pre> dependency edge (node depends on pre)",
+      "  unlink <edgeId>     remove an edge",
+      "  enforce <e> <mode>  set edge enforcement (off|soft|hard)",
+      "  cursor [ids...]     print cursor, or set it to ids",
+      "  transition <to>     move the cursor (--vars json)",
+      "  reward <value>      reinforce the last/chosen edge (--edgeId)",
+      "",
+      "durability:",
+      "  compact [retain]    snapshot and prune old events",
       "  export <file>       write a portable json bundle",
       "  import <file>       load a portable json bundle into --db",
       "",
@@ -34,23 +48,57 @@ function usage() {
   );
 }
 
-function getFlag(args, name, def) {
-  const i = args.indexOf(name);
-  return i >= 0 && i + 1 < args.length ? args[i + 1] : def;
+// Split argv into positionals and `--flag value` pairs (`--json` is boolean).
+// This lets mutation subcommands mix positionals with typed flags cleanly.
+function parseArgs(args) {
+  const flags = {};
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") {
+      flags.json = true;
+    } else if (a.startsWith("--")) {
+      flags[a.slice(2)] = args[++i];
+    } else {
+      positionals.push(a);
+    }
+  }
+  return { flags, positionals };
+}
+
+// Print a Result<T>: value as json on success (exit 0), error json on failure
+// (exit 1). ASCII only.
+function emitResult(r) {
+  if (r && typeof r === "object" && "ok" in r && !r.ok) {
+    process.stdout.write(JSON.stringify(r.error.toJSON(), null, 2) + "\n");
+    return 1;
+  }
+  const value = r && typeof r === "object" && "ok" in r ? r.value : r;
+  process.stdout.write(JSON.stringify(value, null, 2) + "\n");
+  return 0;
+}
+
+function parseJsonFlag(s, what) {
+  if (s === undefined) return undefined;
+  try {
+    return JSON.parse(s);
+  } catch {
+    process.stderr.write(`invalid json for ${what}: ${s}\n`);
+    return null;
+  }
 }
 
 function main() {
   const argv = typeof process !== "undefined" ? process.argv.slice(2) : [];
-  const cmd = argv[0];
+  const { flags, positionals } = parseArgs(argv);
+  const cmd = positionals[0];
   if (!cmd || cmd === "help" || cmd === "--help") {
     usage();
     return 0;
   }
-  const dbFile = getFlag(argv, "--db", "./dstate.db");
-  const json = argv.includes("--json");
-  const rest = argv
-    .slice(1)
-    .filter((a, i, arr) => a !== "--db" && a !== "--json" && arr[i - 1] !== "--db");
+  const dbFile = flags.db ?? "./dstate.db";
+  const json = !!flags.json;
+  const rest = positionals.slice(1);
 
   if (cmd === "describe") {
     process.stdout.write(JSON.stringify(DState.prototype.describe.call({}), null, 2) + "\n");
@@ -146,6 +194,94 @@ function main() {
           process.stdout.write(JSON.stringify(bundle) + "\n");
         }
         return 0;
+      }
+      case "remember": {
+        const id = rest[0];
+        if (!id) {
+          process.stderr.write("remember needs a node id\n");
+          return 2;
+        }
+        const payload = parseJsonFlag(flags.payload, "--payload");
+        if (payload === null) return 2;
+        return emitResult(
+          ds.remember({ id, kind: flags.kind, label: flags.label, payload, tags: flags.tags ? flags.tags.split(",") : undefined }),
+        );
+      }
+      case "get": {
+        const id = rest[0];
+        if (!id) {
+          process.stderr.write("get needs a node id\n");
+          return 2;
+        }
+        const node = ds.getNode(id);
+        process.stdout.write(JSON.stringify(node, null, 2) + "\n");
+        return node ? 0 : 1;
+      }
+      case "recall": {
+        const q = { text: flags.text, kind: flags.kind, tag: flags.tag, status: flags.status };
+        if (flags.limit) q.limit = Number(flags.limit);
+        process.stdout.write(JSON.stringify(ds.recall(q), null, 2) + "\n");
+        return 0;
+      }
+      case "link": {
+        const [from, to] = rest;
+        if (!from || !to) {
+          process.stderr.write("link needs <from> <to>\n");
+          return 2;
+        }
+        const weight = flags.weight !== undefined ? Number(flags.weight) : undefined;
+        return emitResult(
+          ds.link(from, to, { kind: flags.kind, label: flags.label, guard: flags.guard, enforcement: flags.enforcement, weight }),
+        );
+      }
+      case "depend": {
+        const [node, prereq] = rest;
+        if (!node || !prereq) {
+          process.stderr.write("depend needs <node> <prereq>\n");
+          return 2;
+        }
+        return emitResult(ds.depend(node, prereq));
+      }
+      case "unlink": {
+        const edgeId = rest[0];
+        if (!edgeId) {
+          process.stderr.write("unlink needs an edge id\n");
+          return 2;
+        }
+        return emitResult(ds.unlink(edgeId));
+      }
+      case "cursor": {
+        if (rest.length === 0) {
+          process.stdout.write(JSON.stringify(ds.cursor(), null, 2) + "\n");
+          return 0;
+        }
+        return emitResult(ds.setCursor(rest));
+      }
+      case "transition": {
+        const to = rest[0];
+        if (!to) {
+          process.stderr.write("transition needs a target node\n");
+          return 2;
+        }
+        const vars = parseJsonFlag(flags.vars, "--vars");
+        if (vars === null) return 2;
+        return emitResult(ds.transition(to, vars ?? {}));
+      }
+      case "reward": {
+        const value = Number(rest[0]);
+        if (!Number.isFinite(value)) {
+          process.stderr.write("reward needs a numeric value\n");
+          return 2;
+        }
+        return emitResult(ds.reward(value, { edgeId: flags.edgeId }));
+      }
+      case "enforce": {
+        const [edgeId, mode] = rest;
+        if (!edgeId || !mode) {
+          process.stderr.write("enforce needs <edgeId> <off|soft|hard>\n");
+          return 2;
+        }
+        return emitResult(ds.setEnforcement(edgeId, mode));
       }
       default:
         usage();

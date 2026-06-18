@@ -30,6 +30,15 @@ export function validate(ds) {
       if (dst.status !== "active") {
         violations.push({ kind: "TransitionToDeadNode", locus: e.id, detail: `target ${e.dst} is ${dst.status}`, fixable: true });
       }
+    } else if (e.kind === "dependency") {
+      // A dependency edge runs prereq (src) -> dependent (dst). An active
+      // dependent must not depend on a dead prereq: gc() can deprecate a prereq
+      // out from under a still-live dependent, leaving a dangling dep.
+      const src = store.getNode(e.src);
+      const dst = store.getNode(e.dst);
+      if (dst.status === "active" && src.status !== "active") {
+        violations.push({ kind: "DependencyToDeadNode", locus: e.id, detail: `active ${e.dst} depends on ${src.status} ${e.src}`, fixable: true });
+      }
     }
   }
 
@@ -74,6 +83,7 @@ export function repair(ds) {
     switch (v.kind) {
       case "DanglingEdge":
       case "TransitionToDeadNode":
+      case "DependencyToDeadNode":
         store.append({ type: "EdgeRemoved", payload: { id: v.locus } });
         fixed.push(v);
         break;

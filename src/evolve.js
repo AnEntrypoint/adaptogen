@@ -156,6 +156,11 @@ export function selfIterate(ds) {
   for (const s of suggestions) {
     if (s.kind === "gc-dead-node") {
       ds.setStatus(s.target, "deprecated");
+      // Prune the node's edges so no dangling transition/dependency ref to the
+      // now-dead node survives (mirrors gc(); keeps validate() invariants whole).
+      for (const e of [...ds.store.outEdges(s.target), ...ds.store.inEdges(s.target)]) {
+        ds.store.append({ type: "EdgeRemoved", payload: { id: e.id } });
+      }
       applied.push(s);
     } else if (s.kind === "promote-soft-to-hard") {
       ds.setEnforcement(s.target, "hard");

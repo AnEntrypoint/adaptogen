@@ -4,6 +4,7 @@
 // plus describe(); ASCII only.
 
 import { ERROR_CODES } from "./errors.js";
+import { DEFAULT_TUNABLES } from "./config.js";
 
 export const MANIFEST = {
   name: "dstate",
@@ -41,7 +42,7 @@ export const MANIFEST = {
       ["deprecate", "(id) -> Result<DNode>"],
     ],
     edges: [
-      ["link", "(from, to, { id?, kind?, label?, guard?, enforcement?, weight? }) -> Result<DEdge>"],
+      ["link", "(from, to, { id?, kind?, label?, guard?, enforcement?, weight? }) -> Result<DEdge>; weight must be a finite number >= 0"],
       ["depend", "(node, prereq, opts?) -> Result<DEdge>"],
       ["unlink", "(edgeId) -> Result<true>"],
       ["setEnforcement", "(edgeId, mode) -> Result<DEdge>"],
@@ -54,6 +55,7 @@ export const MANIFEST = {
       ["transition", "(to, vars?) -> Result<TransitionOutcome>"],
       ["suggest", "(vars?) -> Suggestion[]"],
       ["reward", "(value, { edgeId?, trace?, depth?, lambda? }) -> Result"],
+      ["getStat", "('node'|'edge', id) -> Stat | null (visits, emaReward, successes, failures, blocks, softViolations)"],
     ],
     dag: [
       ["ready", "(done?) -> NodeId[]"],
@@ -106,5 +108,22 @@ export const MANIFEST = {
       ["history", "(filter?) -> HistoryEntry[]"],
       ["describe", "() -> this manifest"],
     ],
+  },
+  tunables: {
+    summary: "agent-settable knobs (setTunable/getTunables); each is range-checked, an out-of-range value is an InvalidConfig Result",
+    defaults: DEFAULT_TUNABLES,
+    ranges: {
+      defaultEnforcement: "off|soft|hard",
+      explore: "ucb|epsilon|greedy",
+      epsilon: "[0,1]",
+      rewardAlpha: "[0,1]",
+      ucbC: "[0,100]",
+      escalationThreshold: "integer >= 0",
+      demotionCleanRuns: "integer >= 0",
+      snapshotInterval: "integer >= 0",
+      retain: "integer >= 0",
+      decayHalfLife: "number >= 1",
+      maxPayloadBytes: "integer >= 64",
+    },
   },
 };

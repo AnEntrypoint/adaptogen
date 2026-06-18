@@ -16,6 +16,31 @@ test("validate detects a transition to a dead node and repair removes it", () =>
   ds.close();
 });
 
+test("validate flags an active node depending on a dead prereq and repair removes it", () => {
+  const ds = freshMem();
+  ds.remember({ id: "task" });
+  ds.remember({ id: "prereq" });
+  ds.depend("task", "prereq"); // task depends on prereq
+  ds.archive("prereq"); // prereq dies out from under a live dependent
+  const rep = ds.validate();
+  expect(rep.ok).toBe(false);
+  expect(rep.violations.some((v) => v.kind === "DependencyToDeadNode")).toBe(true);
+  ds.repair();
+  expect(ds.validate().ok).toBe(true);
+  ds.close();
+});
+
+test("link rejects a non-finite or negative weight", () => {
+  const ds = freshMem();
+  ds.remember({ id: "a" });
+  ds.remember({ id: "b" });
+  expect(ds.link("a", "b", { weight: NaN }).ok).toBe(false);
+  expect(ds.link("a", "b", { weight: -1 }).ok).toBe(false);
+  expect(ds.link("a", "b", { weight: "2" }).ok).toBe(false);
+  expect(ds.link("a", "b", { weight: 3 }).ok).toBe(true);
+  ds.close();
+});
+
 test("repair resets a cursor sitting on a dead node", () => {
   const ds = freshMem();
   ds.remember({ id: "a" });

@@ -215,6 +215,9 @@ export class DState {
     if (!this.store.getNode(from)) return fail("NotFound", `source node ${from} not found`);
     if (!this.store.getNode(to)) return fail("NotFound", `target node ${to} not found`);
     const kind = opts.kind ?? "transition";
+    if (opts.weight != null && (typeof opts.weight !== "number" || !Number.isFinite(opts.weight) || opts.weight < 0)) {
+      return fail("InvalidInput", `edge weight must be a finite number >= 0, got ${opts.weight}`);
+    }
     if (opts.guard != null) {
       const compiled = this.compile(opts.guard);
       if (!compiled.ok) return compiled;

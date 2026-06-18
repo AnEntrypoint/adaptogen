@@ -3,23 +3,22 @@
   "version": "0.1.0",
   "description": "Agent-owned, self-evolving DAG+FSM state: durable memory, policy and intuition in one event-sourced store, with soft/hard transition enforcement.",
   "type": "module",
-  "module": "src/index.ts",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "module": "src/index.js",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
   "bin": {
-    "dstate": "src/cli.ts"
+    "dstate": "src/cli.js"
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "bench": "bun run bench/bench.ts",
-    "cli": "bun run src/cli.ts"
+    "test:integration": "bun test.js",
+    "bench": "bun run bench/bench.js",
+    "cli": "bun run src/cli.js"
   },
   "engines": {
     "bun": ">=1.1.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.0"
   },
   "keywords": [
     "agent",
