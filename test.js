@@ -5,7 +5,7 @@
 // durability, crash recovery, and portability. Exits 0 only if every assertion
 // holds. Real services, no mocks. Run: `bun test.js`. Hard ceiling: 200 lines.
 
-import { DState, importState, compileGuard, evalGuard, DEFAULT_TUNABLES } from "./src/index.js";
+import { DState, importState, compileGuard, evalGuard, DEFAULT_TUNABLES, MANIFEST } from "./src/index.js";
 import { existsSync, rmSync } from "node:fs";
 
 let n = 0;
@@ -126,6 +126,7 @@ ok(!compileGuard("vars.x >").ok, "malformed guard -> parse error");
 ok(evalGuard(compileGuard("vars.x == 2").value, { vars: { x: 2 } }) === true, "guard evaluates a true comparison");
 ok(compileGuard("vars.__proto__ == 1").error.code === "GuardParseError", "guard compile rejects a __proto__ path");
 ok(evalGuard(compileGuard("vars.missing == 1").value, { vars: {} }) === false, "missing guard key reads undefined -> comparison false");
+ok(!compileGuard("vars.x == '\\q'").ok, "guard string rejects an unknown escape (only \\\\ \\\" \\' n r t)");
 
 // ---- tunables: set persists / invalid rejected -----------------------------
 ok(ds.setTunable("ucbC", 2).ok && ds.getTunables().ucbC === 2, "setTunable persists a knob");
@@ -190,7 +191,10 @@ const clone = importState(":memory:", bundle);
 ok(clone.getNode("scout") !== null && clone.verifyIntegrity().ok, "export/import reproduces a valid store");
 ok(JSON.stringify(clone.cursor().sort()) === JSON.stringify(ds.cursor().sort()), "cloned cursor matches the source");
 clone.close();
-
+// ---- surface sync (no describe() drift) + bounded tail reads ---------------
+ok(Object.values(MANIFEST.verbs).flat().every((v) => typeof ds[v[0]] === "function"), "every manifest verb resolves to a real DState method");
+const t2 = ds.store.readEvents({ type: "TransitionTaken", limit: 2 });
+ok(t2.length === 2 && t2[0].seq < t2[1].seq, "readEvents limit tail-reads the last n in ascending seq");
 ds.close();
 console.log(`integration witness OK: ${n} assertions across a full agent session (memory/dag/fsm/enforce/zone/intuition/step/evolve/checkpoint/durable/recover/port/errors)`);
 cleanup();

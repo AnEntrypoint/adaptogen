@@ -120,15 +120,21 @@ export class Store {
   readEvents(opts = {}) {
     const from = opts.fromSeq ?? 0;
     const to = opts.toSeq ?? Number.MAX_SAFE_INTEGER;
-    const rows = opts.type
-      ? this.db
-          .query(
-            "SELECT * FROM events WHERE seq >= ? AND seq <= ? AND type = ? ORDER BY seq",
-          )
-          .all(from, to, opts.type)
-      : this.db
-          .query("SELECT * FROM events WHERE seq >= ? AND seq <= ? ORDER BY seq")
-          .all(from, to);
+    // `limit` bounds the scan to the most recent N events (ORDER BY seq DESC
+    // LIMIT N), then re-sorts ascending so callers always get chronological
+    // order. This keeps tail reads (recentTransitions/cleanStreak) O(N) on the
+    // index instead of O(seq) over the whole log on long sessions. Without a
+    // limit the behaviour is unchanged: the full range in ascending order.
+    const limited = opts.limit != null && opts.limit >= 0;
+    const order = limited ? "DESC" : "ASC";
+    const tail = limited ? " LIMIT ?" : "";
+    const params = opts.type ? [from, to, opts.type] : [from, to];
+    if (limited) params.push(opts.limit);
+    const sql = opts.type
+      ? `SELECT * FROM events WHERE seq >= ? AND seq <= ? AND type = ? ORDER BY seq ${order}${tail}`
+      : `SELECT * FROM events WHERE seq >= ? AND seq <= ? ORDER BY seq ${order}${tail}`;
+    const rows = this.db.query(sql).all(...params);
+    if (limited) rows.reverse();
     return rows.map((r) => this.rowToEvent(r));
   }
 

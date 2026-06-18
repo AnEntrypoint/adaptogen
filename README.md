@@ -157,11 +157,16 @@ Full grammar, operators, and examples are in `describe().guardDSL`.
 
 ## The verb surface
 
+Compose (the two highest-leverage entrypoints)
+
+- `plan({nodes, transitions, deps, cursor?})` -- one atomic, all-or-nothing call that turns a mental plan into a graph: the whole spec is validated (ids, endpoints, guards, weights, batch acyclicity, cursor) before anything is written, so a failure leaves zero events and names the offending item by index. An endpoint resolves if it pre-exists or is declared in `nodes`.
+- `orient(vars?)` -- one situational snapshot a cold or returning agent reads to decide its next move: `{cursor, suggestions, legalMoves, blocked, ready, violations, integrity_ok, recent, seq, ftsEnabled, tunables, done}`. Pure read.
+
 Memory
 
 - `remember({id, kind?, label?, payload?, tags?, status?, expectVersion?})` -- create/update a node; `payload` is the memory. Optimistic concurrency via `expectVersion`.
 - `recall({id?|kind?|tag?|status?|text?|embedding?, limit?})` -- query nodes by id/kind/tag/status, full-text (FTS5, LIKE fallback), or cosine similarity over a supplied `embedding`.
-- `getNode(id)`, `archive(id)`, `deprecate(id)`.
+- `getNode(id)`, `setStatus(id, status)`, `archive(id)`, `deprecate(id)`.
 
 Structure
 

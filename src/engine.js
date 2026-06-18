@@ -366,20 +366,34 @@ export class DState {
     return ok({ applied: true, soft_warned: trace.decision === "warn", from, to, edgeId: edge.id, trace });
   }
 
-  /** Consecutive clean transitions on an edge since its last violation. */
+  /**
+   * Consecutive clean transitions on an edge since its last violation. Pages the
+   * log backward in bounded windows (newest first) and stops the moment the
+   * streak resolves -- a warned/blocked use of the edge, the threshold being
+   * reached, or the log running out -- so a recently-violated or frequently-used
+   * edge resolves in one window instead of scanning the whole log every call.
+   */
   cleanStreak(edgeId) {
-    const evs = this.store.readEvents();
+    const WINDOW = 256;
+    const enough = this.getTunables().demotionCleanRuns; // caller only needs streak >= this
     let streak = 0;
-    for (let i = evs.length - 1; i >= 0; i--) {
-      const e = evs[i];
-      const p = e.payload;
-      if (p.edgeId !== edgeId) continue;
-      if (e.type === "TransitionTaken") {
-        if (p.clean === true) streak++;
-        else break; // a warned transition ends the clean run
-      } else if (e.type === "BlockedAttempt") {
-        break;
+    let hi = this.store.lastSeq();
+    while (hi >= 1) {
+      const evs = this.store.readEvents({ toSeq: hi, limit: WINDOW });
+      if (evs.length === 0) break;
+      for (let i = evs.length - 1; i >= 0; i--) {
+        const e = evs[i];
+        const p = e.payload;
+        if (p.edgeId !== edgeId) continue;
+        if (e.type === "TransitionTaken") {
+          if (p.clean === true) streak++;
+          else return streak; // a warned transition ends the clean run
+        } else if (e.type === "BlockedAttempt") {
+          return streak;
+        }
       }
+      if (enough > 0 && streak >= enough) return streak;
+      hi = evs[0].seq - 1; // page further back
     }
     return streak;
   }
@@ -485,9 +499,10 @@ export class DState {
   }
 
   recentTransitions(n) {
-    const evs = this.store.readEvents({ type: "TransitionTaken" });
+    // Tail-read only the last n TransitionTaken events (index-bounded), not the
+    // whole log, so reward({trace}) stays O(n) regardless of session length.
+    const evs = this.store.readEvents({ type: "TransitionTaken", limit: n });
     return evs
-      .slice(-n)
       .reverse()
       .map((e) => ({ edgeId: e.payload.edgeId, to: e.payload.to, from: e.payload.from ?? null }));
   }

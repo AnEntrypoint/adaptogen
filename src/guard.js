@@ -8,6 +8,9 @@
 import { ok, fail } from "./errors.js";
 
 const MAX_EXPR_LEN = 2000;
+// The only escape sequences a guard string literal admits; each maps to the
+// character it produces. An escape outside this set is a GuardParseError.
+const ESCAPES = { "\\": "\\", '"': '"', "'": "'", n: "\n", r: "\r", t: "\t" };
 const MAX_DEPTH = 64;
 const FORBIDDEN_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
 
@@ -34,7 +37,11 @@ function tokenize(src) {
       let s = "";
       while (j < src.length && src[j] !== c) {
         if (src[j] === "\\" && j + 1 < src.length) {
-          s += src[j + 1];
+          // Only a known escape is accepted; an unknown one (\x, \u, ...) is a
+          // parse error rather than silently collapsing to the bare character.
+          const esc = ESCAPES[src[j + 1]];
+          if (esc === undefined) return fail("GuardParseError", `invalid escape '\\${src[j + 1]}' in string`);
+          s += esc;
           j += 2;
         } else {
           s += src[j];

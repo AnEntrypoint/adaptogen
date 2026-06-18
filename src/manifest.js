@@ -100,6 +100,7 @@ export const MANIFEST = {
       ["defineZone", "(name, members, { intra?, boundary? }) -> Result<Zone>"],
       ["addToZone", "(name, node) -> Result<Zone>"],
       ["removeFromZone", "(name, node) -> Result<Zone>"],
+      ["zonesOf", "(node) -> ZoneName[] (the zones a node belongs to)"],
       ["deriveZone", "(seed, predicate?) -> Result<{ members }>"],
       ["zones", "() -> Zone[]"],
     ],

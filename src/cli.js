@@ -21,6 +21,9 @@ function usage() {
       "  status              cursor, ranked moves, ready frontier, violations",
       "  metrics             counts, hot paths, enforcement + intuition aggregates",
       "  describe            machine-readable manifest of the full agent surface",
+      "  render              ASCII live view of cursor, moves, and recent log",
+      "  tunables            current agent-settable knobs as json",
+      "  verify              hash-chain integrity report (exit 1 if broken)",
       "  graph               mermaid export of the active graph",
       "  dot                 graphviz dot export",
       "  suggest             ranked next moves as json (with score breakdown)",
@@ -37,6 +40,8 @@ function usage() {
       "  depend <node> <pre> dependency edge (node depends on pre)",
       "  unlink <edgeId>     remove an edge",
       "  enforce <e> <mode>  set edge enforcement (off|soft|hard)",
+      "  set-tunable <k> <v> set an agent knob to a json value (range-checked)",
+      "  repair              auto-fix fixable invariant violations, quarantine the rest",
       "  archive <id>        archive a node",
       "  deprecate <id>      deprecate a node",
       "  cursor [ids...]     print cursor, or set it to ids",
@@ -128,7 +133,17 @@ function main() {
       process.stderr.write("import needs a file\n");
       return 2;
     }
-    const bundle = JSON.parse(readFileSync(file, "utf8"));
+    let bundle;
+    try {
+      bundle = JSON.parse(readFileSync(file, "utf8"));
+    } catch (e) {
+      process.stderr.write(`cannot read/parse bundle ${file}: ${e.message}\n`);
+      return 1;
+    }
+    if (!bundle || !Array.isArray(bundle.events)) {
+      process.stderr.write(`bundle ${file} is not a valid export ({ events: [...] })\n`);
+      return 1;
+    }
     const ds = importState(dbFile, bundle, { lock: false });
     process.stdout.write(`imported ${bundle.events.length} events into ${dbFile}\n`);
     ds.close();
@@ -399,6 +414,30 @@ function main() {
       case "checkpoints":
         process.stdout.write(JSON.stringify(ds.listCheckpoints(), null, 2) + "\n");
         return 0;
+      case "render":
+        process.stdout.write(ds.render() + "\n");
+        return 0;
+      case "tunables":
+        process.stdout.write(JSON.stringify(ds.getTunables(), null, 2) + "\n");
+        return 0;
+      case "set-tunable": {
+        const key = rest[0];
+        if (!key || rest[1] === undefined) {
+          process.stderr.write("set-tunable needs <key> <json-value>\n");
+          return 2;
+        }
+        const value = parseJsonFlag(rest[1], "value");
+        if (value === null) return 2;
+        return emitResult(ds.setTunable(key, value));
+      }
+      case "repair":
+        process.stdout.write(JSON.stringify(ds.repair(), null, 2) + "\n");
+        return 0;
+      case "verify": {
+        const report = ds.verifyIntegrity();
+        process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+        return report.ok ? 0 : 1;
+      }
       default:
         usage();
         return 2;
