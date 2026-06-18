@@ -13,6 +13,7 @@
   },
   "files": [
     "src",
+    ".claude/skills",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -31,6 +32,7 @@
     "cli": "bun run src/cli.js"
   },
   "engines": {
+    "node": ">=18",
     "bun": ">=1.1.0"
   },
   "keywords": [

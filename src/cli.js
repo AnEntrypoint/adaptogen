@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // Thin CLI over the facade for humans and for the agent to shell out to. ASCII
 // output, conventional exit codes. Subcommands map to verbs. Pass --json to make
 // the human-readable commands (status, history) emit structured JSON instead, so

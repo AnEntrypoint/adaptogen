@@ -25,6 +25,34 @@ zones" it may move within freely while crossing their boundary stays governed.
                  DAG (deps) + FSM (transitions)
 ```
 
+## Use it from the shell (npx)
+
+No install, no Bun, no build step -- the CLI runs under plain Node, so an agent
+reaches the entire surface through one binary:
+
+```
+npx -y adaptogen orient                              # one situational snapshot
+npx -y adaptogen remember plan --payload '{"goal":"ship"}'
+npx -y adaptogen plan --spec '{"nodes":["a","b"],"transitions":[["a","b"]],"cursor":["a"]}'
+npx -y adaptogen step --reward 1                      # pick -> move -> reinforce
+npx -y adaptogen describe                             # machine-readable manifest
+```
+
+The store defaults to `./adaptogen.db` (project-resident and portable); pass
+`--db <file>` to choose another, or `--db :memory:` for an ephemeral run. Run
+`npx -y adaptogen help` for the full command list and `describe` for every verb,
+error code, and the guard DSL grammar.
+
+### Enforce it as a Claude Code skill
+
+This repo ships an Agent Skill at [`.claude/skills/adaptogen/`](.claude/skills/adaptogen/SKILL.md)
+that routes every juncture of a task -- orient, plan, transition, reward,
+checkpoint, recall -- through `npx adaptogen`, so durable state never lives only
+in an agent's prose. It is active automatically when Claude Code runs inside this
+repo. To adopt it in another project, copy or symlink that directory into the
+project's `.claude/skills/` (it is included in the published npm package under the
+same path).
+
 ## Why event-sourced over SQLite
 
 The spine is an append-only, hash-chained event log; the queryable graph is a

@@ -1,7 +1,16 @@
 # Changelog
 
-## Unreleased (single-file test regime)
+## Unreleased
 
+- feat(npx): the CLI now runs under plain Node -- the `bin` shebang switched from
+  `bun` to `node` (the runtime path has no `bun:` imports; `libsql` is node-native),
+  so `npx -y adaptogen <command>` works with zero install and no Bun. `engines` now
+  declares `node >=18` alongside `bun`.
+- feat(skill): ship a Claude Code Agent Skill at `.claude/skills/adaptogen/SKILL.md`
+  (included in the npm package) that enforces routing every task juncture --
+  orient, plan, transition/step, reward, checkpoint, recall, validate, export --
+  through `npx adaptogen`, so durable state never lives only in agent prose. README
+  gains an npx quickstart and a skill-adoption note.
 - chore(test): tests are now ONE file -- `test.js` at repo root, real services
   only, 200-line hard ceiling (176 lines). The `test/` directory (24 files) is
   removed. The single witness was widened from 22 to 62 assertions, covering the
