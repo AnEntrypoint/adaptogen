@@ -4,11 +4,7 @@ adaptogen is an agent-owned, self-evolving DAG+FSM state store. These are the
 load-bearing invariants. Any agent (or human) changing this code keeps them.
 
 Runtime: buildless JavaScript (ES modules, no types, no compile step) on Bun.
-Persistence is a synchronous libsql client (`libsql` package) reached only
-through the `db.js` facade, which re-exposes the bun:sqlite-shaped
-`db.query(sql).get/all` and `db.run(sql, ...args)` surface, strips libsql's
-injected `_metadata` row key, and normalizes bind values. Do not import a SQLite
-driver anywhere else; go through `openDatabase`/the facade.
+Persistence: synchronous libsql client behind `db.js` facade -- use `openDatabase`; never import a SQLite driver directly (facade detail in rs-learn).
 
 ## Architecture (do not route around)
 
@@ -56,11 +52,6 @@ driver anywhere else; go through `openDatabase`/the facade.
   `bun test.js` (the integration witness) passing and `bun run bench` under budget
   (per-step transition+suggest stays flat as the graph grows; the bench fails on an
   O(n) regression). Push only on a clean tree.
-- Tests are ONE file: `test.js` at repo root, 200-line hard ceiling, real services
-  only (real libsql, real on-disk store, real crash recovery -- no mocks, no `test/`
-  directory and no `*.test.js` suite). It is a plain script of `ok(cond, msg)`
-  assertions that `process.exit(1)` on the first failure and exits 0 only when every
-  assertion holds; maximize the API surface it covers within the 200-line budget. A
-  new behavior earns an assertion in `test.js`, not a new file.
+- Tests are ONE file: `test.js` at repo root, 200-line ceiling, real services, no mocks (contract in rs-learn). New behavior -> assertion in `test.js`, not a new file.
 
 @.gm/next-step.md
