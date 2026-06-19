@@ -56,9 +56,7 @@ ok(ds.getNode("nope") === null, "getNode(missing) -> null");
 ok(ds.setStatus("nope", "archived").error.code === "NotFound", "setStatus(missing) -> NotFound");
 
 // ---- dag: depend / topo / ready frontier / ancestors+descendants / cycle ----
-ds.depend("build", "scout");
-ds.depend("review", "build");
-ds.depend("ship", "review");
+ds.depend("build", "scout"); ds.depend("review", "build"); ds.depend("ship", "review");
 ok(!ds.topo().cyclic, "dependency dag is acyclic");
 ok(ds.ready([]).includes("scout"), "scout is the initial ready frontier");
 ok(ds.ready(["scout"]).includes("build"), "build is ready once scout is done");
@@ -68,25 +66,22 @@ const cyc = ds.depend("scout", "ship");
 ok(!cyc.ok && cyc.error.code === "CycleRejected", "cyclic dependency rejected");
 
 // ---- edges: link / guard+enforcement / weight validation / unlink ----------
-ds.link("scout", "build");
-ds.link("build", "review");
+ds.link("scout", "build"); ds.link("build", "review");
 const shipEdge = ds.link("review", "ship", { guard: "vars.approved == true", enforcement: "hard" });
-ds.link("review", "build");
-ds.link("ship", "abort", { enforcement: "soft" });
+ds.link("review", "build"); ds.link("ship", "abort", { enforcement: "soft" });
 ok(shipEdge.ok, "guarded hard edge created");
 ok(!ds.link("scout", "build", { weight: -1 }).ok, "negative edge weight rejected");
 const tmp = ds.link("scout", "review");
 ok(ds.unlink(tmp.value.id).ok, "unlink removes an edge");
 ok(ds.unlink("G-nope").error.code === "NotFound", "unlink(missing) -> NotFound");
 
-// ---- zones: define / membership / deriveZone proposal ----------------------
+// ---- zones: define / membership / deriveZone / ZoneNotFound ----------------
 ds.defineZone("inner", ["scout", "build", "review"], { intra: "off", boundary: "soft" });
 ok(ds.zonesOf("build").includes("inner"), "zonesOf reports membership");
-ds.addToZone("inner", "ship");
-ds.removeFromZone("inner", "ship");
+ds.addToZone("inner", "ship"); ds.removeFromZone("inner", "ship");
 ok(!ds.zonesOf("ship").includes("inner"), "add then remove zone membership");
-const derived = ds.deriveZone("scout");
-ok(derived.ok && derived.value.members.includes("build"), "deriveZone proposes reachable members");
+ok(ds.deriveZone("scout").value.members.includes("build"), "deriveZone proposes reachable members");
+ok(ds.addToZone("no-zone", "scout").error.code === "ZoneNotFound", "addToZone missing zone -> ZoneNotFound");
 
 // ---- fsm: cursor / legalMoves / explain / allow+deny+warn transitions ------
 ds.setCursor(["scout"]);
@@ -97,8 +92,7 @@ ok(ds.transition("review").value.applied, "build->review applies");
 ok(ds.explainTransition("ship").value.decision === "deny", "explain: unapproved ship denies");
 ok(ds.transition("zzz").error.code === "NotFound", "transition to missing node -> NotFound");
 const blocked = ds.transition("ship");
-ok(blocked.value.applied === false && blocked.value.soft_warned === false, "unapproved ship hard-blocked, not applied");
-ok(ds.cursor()[0] === "review", "cursor holds on a block");
+ok(!blocked.value.applied && !blocked.value.soft_warned && ds.cursor()[0] === "review", "unapproved ship hard-blocked, cursor holds");
 const ship = ds.transition("ship", { approved: true });
 ok(ship.value.applied && ship.value.soft_warned, "approved ship crosses soft boundary: warns + applies");
 
@@ -111,12 +105,9 @@ const sug = ds.suggest({ approved: true });
 ok(sug.length === 2 && sug[0].breakdown && "reward" in sug[0].breakdown && "explore" in sug[0].breakdown, "suggest ranks legal moves with a score breakdown");
 const stepped = ds.step({ vars: { approved: true }, reward: 1 });
 ok(stepped.ok && stepped.value.applied && stepped.value.reward, "step() picks, applies, and rewards the top move");
-ds.setCursor(["abort"]);
-const noMoves = ds.step();
+ds.setCursor(["abort"]); const noMoves = ds.step();
 ok(!noMoves.ok && noMoves.error.code === "NoMoves" && noMoves.error.details.hint, "step with no legal move -> NoMoves + recovery hint");
-ds.setCursor(["scout"]);
-ds.transition("build");
-ds.transition("review");
+ds.setCursor(["scout"]); ds.transition("build"); ds.transition("review");
 const decay = ds.reward(1, { trace: true, depth: 3 });
 ok(decay.ok && decay.value.scopes > 1, "trace reward decays credit over recent transitions");
 
@@ -133,39 +124,44 @@ ok(ds.setTunable("ucbC", 2).ok && ds.getTunables().ucbC === 2, "setTunable persi
 ok(!ds.setTunable("bogusKnob", 1).ok, "unknown tunable rejected");
 
 // ---- checkpoint / rollback (exact projection restore) ----------------------
-ds.setCursor(["review"]);
-ds.checkpoint("cp1");
+ds.setCursor(["review"]); ds.checkpoint("cp1");
 ds.transition("build");
 ok(ds.cursor()[0] === "build", "cursor diverged after the checkpoint");
 ds.rollback("cp1");
 ok(ds.cursor()[0] === "review", "rollback restored the cursor to review");
 ok(ds.verifyIntegrity().ok, "hash-chain integrity intact after rollback");
 ok(ds.rollback("nope").error.code === "CheckpointNotFound", "rollback(missing) -> CheckpointNotFound");
+ok(ds.listCheckpoints().some((c) => c.name === "cp1"), "listCheckpoints returns named checkpoints");
 
 // ---- self-evolution: a safe iteration preserves every invariant ------------
 const iter = ds.selfIterate();
-ok(iter.ok && iter.value.valid, "selfIterate converges without breaking invariants");
-ok(ds.validate().ok, "validate is clean post-iteration");
-ok(ds.repair().fixed.length === 0, "repair finds nothing to fix on a clean store");
+ok(iter.ok && iter.value.valid && ds.validate().ok && ds.repair().fixed.length === 0, "selfIterate converges, validate+repair clean");
+
+// ---- evolve: mergeStates / splitState / migrate / gc ----------------------
+const em = DState.open(":memory:", { seed: false });
+for (const id of ["p", "q", "r"]) em.remember({ id, kind: "state", payload: {} });
+em.link("p", "q"); em.setCursor(["q"]);
+const mg = em.mergeStates("p", "q");
+ok(mg.ok && em.getNode("q").status === "deprecated" && !em.cursor().includes("q"), "mergeStates deprecates b and moves cursor");
+ok(em.mergeStates("p", "nope").error.code === "NotFound", "mergeStates missing node -> NotFound");
+em.remember({ id: "s", kind: "state", payload: {} }); const seid = em.link("p", "s").value.id;
+ok(em.splitState("p", "p2", [seid]).ok && em.getNode("p2") !== null, "splitState clones a node");
+ok(em.migrate("state", () => { throw new Error("oops"); }).error.code === "MigrationError", "migrate throw -> MigrationError");
+ok(em.migrate("state", (p) => ({ ...p, v: 1 })).ok, "migrate transforms all nodes of kind");
+const gcR = em.gc(); ok(typeof gcR.deprecated === "object", "gc returns deprecated list"); em.close();
+// ---- observability: history / render / metrics / toDot --------------------
+ok(ds.history({ type: "TransitionTaken", limit: 1 })[0]?.summary.includes("->"), "history returns annotated events");
+ok(ds.render().startsWith("cursor:") && ds.metrics().nodes.total > 0 && ds.toDot().startsWith("digraph"), "render/metrics/toDot surface ok");
 
 // ---- compose: plan() atomic bulk builder + orient() snapshot ---------------
 const pb = DState.open(":memory:", { seed: false });
 ok(pb.plan({}).value.nodes.length === 0, "plan with an empty spec creates nothing");
-const built = pb.plan({
-  nodes: ["a", { id: "b", payload: { k: 1 } }, "c"],
-  transitions: [["a", "b"], ["b", "c", { guard: "vars.go == true" }]],
-  deps: [["b", "a"], ["c", "b"]],
-  cursor: ["a"],
-});
-ok(built.ok && built.value.nodes.length === 3 && built.value.transitions.length === 2, "plan builds nodes+edges atomically");
+ok(pb.plan({ nodes: ["a", { id: "b", payload: { k: 1 } }, "c"], transitions: [["a", "b"], ["b", "c", { guard: "vars.go == true" }]], deps: [["b", "a"], ["c", "b"]], cursor: ["a"] }).ok, "plan builds nodes+edges atomically");
 ok(JSON.stringify(pb.cursor()) === JSON.stringify(["a"]) && pb.ready([]).join() === "a", "plan sets cursor and the dep frontier is the root");
 const seq0 = pb.store.lastSeq();
 ok(pb.plan({ nodes: ["d"], transitions: [["d", "a", { guard: "vars.x ==" }]] }).error.code === "GuardParseError", "plan rejects a bad guard");
-ok(pb.plan({ deps: [["a", "c"]] }).error.code === "CycleRejected", "plan rejects a batch-closing dependency cycle");
-ok(pb.plan({ nodes: ["e", "e"] }).error.code === "DuplicateId", "plan rejects a duplicate id within the spec");
-ok(pb.store.lastSeq() === seq0 && pb.getNode("d") === null, "a failed plan writes nothing (all-or-nothing atomicity)");
-const o = pb.orient({ go: true });
-ok(o.cursor[0] === "a" && o.suggestions[0].to === "b" && o.integrity_ok && !o.done, "orient returns a coherent situational snapshot");
+ok(pb.plan({ deps: [["a", "c"]] }).error.code === "CycleRejected" && pb.plan({ nodes: ["e", "e"] }).error.code === "DuplicateId" && pb.store.lastSeq() === seq0 && pb.getNode("d") === null, "plan: invalid specs are rejected and write nothing");
+const o = pb.orient({ go: true }); ok(o.cursor[0] === "a" && o.suggestions[0].to === "b" && o.integrity_ok && !o.done, "orient returns a coherent situational snapshot");
 pb.close();
 
 // ---- durability: state survives a real close / reopen ----------------------

@@ -24,7 +24,7 @@ export function render(ds) {
   const ready = ds.ready(done);
   lines.push(`ready: ${ready.length ? ready.join(", ") : "(none)"}`);
 
-  const rewards = ds.store.readEvents({ type: "RewardApplied" }).slice(-3);
+  const rewards = ds.store.readEvents({ type: "RewardApplied", limit: 3 });
   if (rewards.length) {
     lines.push("recent rewards:");
     for (const r of rewards) lines.push(`  ${r.payload.value} @ seq ${r.seq}`);

@@ -46,6 +46,10 @@ export function mergeStates(ds, a, b) {
       ds.store.append({ type: "EdgeUpserted", payload: { id: ds.ids.next("G"), src: e.src, dst: a, kind: e.kind, label: e.label, guard: e.guard, enforcement: e.enforcement, weight: e.weight } });
     }
   }
+  const cur = ds.store.cursor();
+  if (cur.includes(b)) {
+    ds.store.append({ type: "CursorMoved", payload: { set: [...new Set(cur.map((c) => (c === b ? a : c)))] } });
+  }
   ds.store.append({ type: "NodeStatusChanged", payload: { id: b, status: "deprecated" } });
   return ok({ into: a });
 }

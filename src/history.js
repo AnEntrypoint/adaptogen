@@ -3,24 +3,23 @@
 // the CLI both read through here. ASCII-only, human/agent readable.
 
 export function history(ds, filter = {}) {
-  const evs = ds.store.readEvents({
+  const limit = filter.limit ?? 100;
+  const opts = {
     ...(filter.fromSeq != null ? { fromSeq: filter.fromSeq } : {}),
     ...(filter.type ? { type: filter.type } : {}),
-  });
-  const limit = filter.limit ?? 100;
-  const matched = evs.filter((e) => {
+  };
+  const toEntry = (e) => ({ seq: e.seq, ts: e.ts, type: e.type, summary: summarize(e.type, e.payload), payload: e.payload });
+  // Fast path: no per-event node/edge filter -- push limit into the store query.
+  if (!filter.node && !filter.edge) {
+    return ds.store.readEvents({ ...opts, limit }).map(toEntry);
+  }
+  const matched = ds.store.readEvents(opts).filter((e) => {
     const p = e.payload;
     if (filter.node && p.to !== filter.node && p.from !== filter.node && p.id !== filter.node) return false;
     if (filter.edge && p.edgeId !== filter.edge && p.id !== filter.edge) return false;
     return true;
   });
-  return matched.slice(-limit).map((e) => ({
-    seq: e.seq,
-    ts: e.ts,
-    type: e.type,
-    summary: summarize(e.type, e.payload),
-    payload: e.payload,
-  }));
+  return matched.slice(-limit).map(toEntry);
 }
 
 function summarize(type, p) {
