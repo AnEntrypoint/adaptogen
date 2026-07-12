@@ -1,6 +1,6 @@
 # adaptogen
 
-A Claude Code Agent Skill -- `adaptogen` -- that improves any skill
+An agent skill -- `adaptogen` -- that improves any skill
 (itself included) by running it, adversarially critiquing the result, and
 landing every evidence-backed fix immediately as a real edit, confirmed by
 re-running and committed to git. No side files, no state tracking: git is the
@@ -8,8 +8,9 @@ entire durability layer.
 
 ## Install
 
-Copy `skills/adaptogen/` into your project's own `skills/` (or
-`.claude/skills/`) directory alongside whatever skills you already have.
+Copy `skills/adaptogen/` into your project's own `skills/` (or your
+agent's skills directory, e.g. `.claude/skills/`) alongside whatever
+skills you already have.
 That's the whole install -- one self-contained `SKILL.md`, no dependencies.
 
 ## Use

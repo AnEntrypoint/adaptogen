@@ -1,7 +1,7 @@
 ---
 name: adaptogen
 description: >-
-  Improve any Claude Code skill -- itself included -- by running it as an
+  Improve any agent skill -- itself included -- by running it as an
   isolated subagent, adversarially critiquing the result, and landing every
   evidence-backed fix immediately as a direct edit to that skill's own
   SKILL.md/scripts (or, if the finding is in the host project rather than
@@ -167,9 +167,10 @@ skill drafted from a guess and never run is unverified by construction.
 - **Target and its git history must be co-located.** The durability model
   assumes the target SKILL.md lives in the same git repo whose `git log`
   is the lessons file (Rules 4-6). Before running, confirm the target is
-  tracked in a repo you can commit to; a target under `~/.claude/skills/`
-  or another machine-resident location has no git history to check or land
-  into -- edit it in its own source repo, not the installed copy.
+  tracked in a repo you can commit to; a target under an agent's installed
+  skills directory (e.g. `~/.claude/skills/`) or another machine-resident
+  location has no git history to check or land into -- edit it in its own
+  source repo, not the installed copy.
 - **Stay ASCII; validate before you commit.** A CI validator may reject
   any non-ASCII byte in a SKILL.md (smart quotes, em-dashes, arrows). Use
   plain `--`, `->`, and straight quotes, and run the repo's SKILL.md
