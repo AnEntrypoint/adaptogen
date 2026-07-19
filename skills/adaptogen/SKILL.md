@@ -48,7 +48,7 @@ adaptogen-orient --new skill----------------> adaptogen-build-new
 adaptogen-build-new --skill drafted---------> adaptogen-run
 
 adaptogen-run --report captured-------------> adaptogen-critique
-adaptogen-run --caller scoped one bounded pass--> report-and-STOP
+adaptogen-run --leaf-agent, or caller scoped one bounded pass--> STOP (report first)
 
 adaptogen-critique --finding(s) confirmed---> adaptogen-land
 adaptogen-critique --nothing survives the evidence gate--> STOP
@@ -59,7 +59,7 @@ adaptogen-commit-confirm --commit made, regress to confirm--> adaptogen-run
 adaptogen-commit-confirm --confirming re-run: finding gone, nothing new/worse--> STOP
 adaptogen-commit-confirm --confirming re-run: finding persists or regressed----> adaptogen-run
                                                             [git revert first -- regression]
-adaptogen-commit-confirm --caller scoped one bounded pass, or editing forbidden--> STOP
+adaptogen-commit-confirm --leaf-agent, caller scoped one bounded pass, editing forbidden, or no committable repo--> STOP
                                                             [no confirming re-run]
 ```
 
@@ -137,6 +137,14 @@ view)
 
 ## Gotchas
 
+- **Leaf-agent mode collapses the dispatch edges.** When adaptogen is
+  itself already running as a dispatched subagent (a leaf that cannot
+  spawn its own subagents), `adaptogen-run`/`adaptogen-critique`/
+  `adaptogen-commit-confirm` execute their work in-context instead of
+  dispatching, and the confirming re-run is waived (see those siblings
+  for the exact rewiring). The state map's transitions still hold; only
+  the "dispatch a subagent" mechanic becomes "do it directly." A router
+  reader should not assume every edge always spawns a fresh agent.
 - A skill written earlier in the same turn is not `Skill`-dispatchable
   mid-turn -- the skill list loads at session start. Use the Agent tool
   to follow its `SKILL.md` directly instead; this is the normal path for
