@@ -13,7 +13,6 @@ node_modules/
 
 # editor
 .DS_Store
-.vscode/
 
 # gm tooling working dir + wfgy session lessons -- internal, not shipped
 .gm/
@@ -51,3 +50,4 @@ node_modules/
 .gm/browser-profile/
 .gm/browser-profile-*/
 .gm/browser-state/
+config.bat

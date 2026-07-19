@@ -8,18 +8,26 @@ entire durability layer.
 
 ## Install
 
-Copy `skills/adaptogen/` into your project's own `skills/` (or your
+Copy all of `skills/adaptogen*/` (the `adaptogen` router plus its six
+sibling state-skills: `adaptogen-orient`, `adaptogen-run`,
+`adaptogen-critique`, `adaptogen-land`, `adaptogen-commit-confirm`,
+`adaptogen-build-new`) into your project's own `skills/` (or your
 agent's skills directory, e.g. `.claude/skills/`) alongside whatever
-skills you already have.
-That's the whole install -- one self-contained `SKILL.md`, no dependencies.
+skills you already have. The router dispatches the siblings by name, so
+all seven must be installed together -- copying only `skills/adaptogen/`
+leaves every transition dead-ending on a missing skill.
 
 ## Use
 
-Point it at any `skills/<name>/SKILL.md`, including its own. It dispatches an
-isolated subagent to actually run the skill, a second isolated subagent to
-hunt for fault in the result, edits the file the fault is actually in the
-moment it's confirmed, then re-runs to make sure the fix held. See
-`skills/adaptogen/SKILL.md` for the exact procedure.
+Point it at any `skills/<name>/SKILL.md`, including its own. The
+`adaptogen` router walks a DAG of sibling state-skills: `adaptogen-orient`
+classifies the target (existing vs new, git co-location), `adaptogen-run`
+dispatches an isolated subagent to actually run it (or `adaptogen-build-new`
+drafts one first), `adaptogen-critique` sends a second isolated subagent to
+hunt for fault, `adaptogen-land` edits the file each confirmed fault is in,
+and `adaptogen-commit-confirm` commits and re-runs to make sure the fix held
+(reverting on regression). See `skills/adaptogen/SKILL.md` for the state map
+and the exact procedure.
 
 ## Why no state files
 
